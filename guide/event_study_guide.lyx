@@ -2192,7 +2192,7 @@ status open
 
 \begin_layout Plain Layout
 \begin_inset Graphics
-	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size1000_homogeneous.png
+	filename ../eventStudy/inst/figures/event_time_all_seed1_size1000_homogeneous.png
 	lyxscale 10
 	scale 10
 
@@ -2228,7 +2228,7 @@ status open
 
 \begin_layout Plain Layout
 \begin_inset Graphics
-	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_homogeneous.png
+	filename ../eventStudy/inst/figures/event_time_all_seed1_size10000_homogeneous.png
 	lyxscale 10
 	scale 10
 
@@ -2480,7 +2480,7 @@ status open
 
 \begin_layout Plain Layout
 \begin_inset Graphics
-	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_trends.png
+	filename ../eventStudy/inst/figures/event_time_all_seed1_size10000_trends.png
 	lyxscale 10
 	scale 10
 
@@ -2512,7 +2512,7 @@ status open
 
 \begin_layout Plain Layout
 \begin_inset Graphics
-	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_trends_corrected.png
+	filename ../eventStudy/inst/figures/event_time_all_seed1_size10000_trends_corrected.png
 	lyxscale 10
 	scale 10
 
@@ -2618,7 +2618,7 @@ status open
 
 \begin_layout Plain Layout
 \begin_inset Graphics
-	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_anticipation.png
+	filename ../eventStudy/inst/figures/event_time_all_seed1_size10000_anticipation.png
 	lyxscale 10
 	scale 10
 
@@ -2650,7 +2650,7 @@ status open
 
 \begin_layout Plain Layout
 \begin_inset Graphics
-	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_anticipation_corrected.png
+	filename ../eventStudy/inst/figures/event_time_all_seed1_size10000_anticipation_corrected.png
 	lyxscale 10
 	scale 10
 

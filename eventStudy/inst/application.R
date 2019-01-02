@@ -24,14 +24,14 @@ main_figs <- function(){
   for(s in c(1,2)){
     for(u in c(1e3, 1e4)){
       fig = ES_simulate_estimator_comparison(units = u, seed = s, homogeneous_ATT = TRUE)[[1]]
-      ggsave(sprintf("figures/event_time_all_seed%s_size%s_homogeneous.png", s, u), width = 12, height = 5)
+      ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_homogeneous.png", s, u), width = 12, height = 5)
     }
   }
 
   for(s in c(1,2)){
     for(u in c(1e3, 1e4)){
       fig = ES_simulate_estimator_comparison(units = u, seed = s, homogeneous_ATT = FALSE)[[1]]
-      ggsave(sprintf("figures/event_time_all_seed%s_size%s_heterogeneous.png", s, u), width = 12, height = 5)
+      ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_heterogeneous.png", s, u), width = 12, height = 5)
     }
   }
 
@@ -40,9 +40,9 @@ main_figs <- function(){
   s = 1
 
   fig = ES_simulate_estimator_comparison(units = u, seed = s, cohort_specific_trends=T, correct_pre_trends = F)[[1]]
-  ggsave(sprintf("figures/event_time_all_seed%s_size%s_trends.png", s, u), width = 12, height = 5)
+  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_trends.png", s, u), width = 12, height = 5)
   fig = ES_simulate_estimator_comparison(units = u, seed = s, cohort_specific_trends=T, correct_pre_trends = T)[[1]]
-  ggsave(sprintf("figures/event_time_all_seed%s_size%s_trends_corrected.png", s, u), width = 12, height = 5)
+  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_trends_corrected.png", s, u), width = 12, height = 5)
 
 }
 
@@ -54,14 +54,14 @@ antic_figs <- function(){
 
   results_anticipation = ES_simulate_estimator_comparison(units = u, seed = s, anticipation=T, omitted_event_time = -3, cohort_specific_anticipation = T)
   fig = results_anticipation[[1]]
-    ggsave(sprintf("figures/event_time_all_seed%s_size%s_anticipation.png", s, u), width = 12, height = 5)
+    ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_anticipation.png", s, u), width = 12, height = 5)
   sample_check_anticipation = results_anticipation[[2]]
   sample_check_anticipation[, anticipation_corrected := 0]
   event_time_1_coh_2002 = results_anticipation[[3]]
 
   results_anticipation_corrected = ES_simulate_estimator_comparison(units = u, seed = s, oversample_one_year=F, anticipation=T, min_control_gap = 3, max_control_gap = Inf,omitted_event_time = -3, cohort_specific_anticipation = T)
   fig = results_anticipation_corrected[[1]]
-    ggsave(sprintf("figures/event_time_all_seed%s_size%s_anticipation_corrected.png", s, u), width = 12, height = 5)
+    ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_anticipation_corrected.png", s, u), width = 12, height = 5)
   sample_check_anticipation_corrected = results_anticipation_corrected[[2]]
   sample_check_anticipation_corrected[, anticipation_corrected := 1]
   event_time_1_coh_2002_corrected = results_anticipation_corrected[[3]]
