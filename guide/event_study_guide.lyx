@@ -1,0 +1,3013 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\begin_preamble
+\usepackage[margin=.8in]{geometry}
+\end_preamble
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing other 1.5
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine natbib
+\cite_engine_type authoryear
+\biblio_style plainnat
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Practical Guide to Event Studies
+\end_layout
+
+\begin_layout Author
+David Novgorodsky 
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+hspace{.6cm}
+\end_layout
+
+\end_inset
+
+Bradley Setzler
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+
+\backslash
+
+\end_layout
+
+\end_inset
+
+
+\size small
+Department of Economics, University of Chicago
+\end_layout
+
+\begin_layout Section
+Identification with Perfect Control Groups
+\end_layout
+
+\begin_layout Standard
+In this section, we define our parameter of interest in event study designs
+ as well as a set of key assumptions that play a role in its identification.
+ We borrow heavily from the presentation in 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "AbrahamSun2018"
+literal "false"
+
+\end_inset
+
+.
+ Throughout, we motivate our approach using an example taken from 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "FadlonNielsen2017"
+literal "false"
+
+\end_inset
+
+ (FN hereafter) where the outcome is wife's labor supply and the research
+ design leverages variation in the timing of spousal death.
+\end_layout
+
+\begin_layout Subsection
+Notation and Parameter of Interest
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Notation:
+\series default
+\bar default
+ For individual 
+\begin_inset Formula $i$
+\end_inset
+
+, denote the outcome in year 
+\begin_inset Formula $t$
+\end_inset
+
+ by 
+\begin_inset Formula $Y_{it}$
+\end_inset
+
+ (this is observed), the year at which treatment occurs by 
+\begin_inset Formula $E_{i}$
+\end_inset
+
+ (this is observed), and the potential outcomes by 
+\begin_inset Formula $Y_{it}\left(e\right)$
+\end_inset
+
+ (this is not observed unless 
+\begin_inset Formula $E_{i}=e$
+\end_inset
+
+).
+ 
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+\begin_inset CommandInset citation
+LatexCommand citet
+key "AtheyImbens2018"
+literal "false"
+
+\end_inset
+
+ also begin with a setting where onset dates define potential outcomes,
+ but with a focus on design-based estimators where the source of uncertainty
+ is in the assignment mechanism for onset dates across sample units.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Itemize
+Example 1 (FN): 
+\begin_inset Formula $Y_{it}$
+\end_inset
+
+ = wife's labor supply, 
+\begin_inset Formula $E_{i}$
+\end_inset
+
+ = year that husband dies of fatal heart attack.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Parameter of interest:
+\series default
+\bar default
+ We are interested in the average treatment on the treated, which is 
+\begin_inset Formula $\mathrm{ATT}_{t}\left(e\right)\equiv\mathbb{E}\left[Y_{it}\left(e\right)-Y_{it}\left(\infty\right)\big|E_{it}=e\right]$
+\end_inset
+
+, where 
+\begin_inset Formula $Y_{it}\left(\infty\right)$
+\end_inset
+
+ is the outcome an 
+\begin_inset Formula $i$
+\end_inset
+
+ would have at 
+\begin_inset Formula $t$
+\end_inset
+
+ if counterfactually assigned treatment at time 
+\begin_inset Formula $\infty$
+\end_inset
+
+ (i.e., never treated).
+ This is the average difference in 
+\begin_inset Formula $Y_{it}$
+\end_inset
+
+ that is due to being treated at 
+\begin_inset Formula $e$
+\end_inset
+
+ instead of 
+\begin_inset Formula $\infty$
+\end_inset
+
+, among those who are treated at 
+\begin_inset Formula $e$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Itemize
+Example 1 (FN): 
+\begin_inset Formula $\mathbb{E}\left[Y_{it}\left(1995\right)-Y_{it}\left(\infty\right)\big|E_{it}=1995\right]$
+\end_inset
+
+ is the difference in labor supply at, say, time 
+\begin_inset Formula $t=1997$
+\end_inset
+
+ for a wife whose husband died in 1995 versus if her husband had never died.
+\end_layout
+
+\begin_layout Subsection
+Parallel Trends vs No Anticipation
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Definition: Parallel Trends
+\series default
+\bar default
+ is defined as 
+\begin_inset Formula $\mathbb{E}\left[Y_{is}\left(\infty\right)-Y_{it}\left(\infty\right)\big|E_{i}=e\right]=\mathbb{E}\left[Y_{is}\left(\infty\right)-Y_{it}\left(\infty\right)\big|E_{i}=e'\right]$
+\end_inset
+
+, for all 
+\begin_inset Formula $e\neq e'$
+\end_inset
+
+ and all 
+\begin_inset Formula $t\neq s$
+\end_inset
+
+.
+ This says that, for any two observed cohorts 
+\begin_inset Formula $e$
+\end_inset
+
+ and 
+\begin_inset Formula $e'$
+\end_inset
+
+, the change over time they would have had in the absence of treatment is
+ the same.
+\end_layout
+
+\begin_layout Itemize
+Example 1 (FN): Parallel trends requires that, for wives whose husbands
+ died in 1995 and wives whose husbands died in 2000, if none of their husbands
+ had died, they would have experienced the same change in mean labor supply
+ between 1995 and 1996.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Definition: No Anticipation
+\series default
+\bar default
+ is defined as 
+\begin_inset Formula $Y_{it}\left(e\right)=Y_{it}\left(\infty\right)$
+\end_inset
+
+, for all 
+\begin_inset Formula $t<e$
+\end_inset
+
+ and for all 
+\begin_inset Formula $e$
+\end_inset
+
+.
+ This says that, prior to the onset of treatment, outcomes do not depend
+ on the time at which treatment will occur.
+\end_layout
+
+\begin_layout Itemize
+Example 1 (FN): No anticipation requires that, in 1994, wives of husbands
+ who died in 1995 did not have different labor supply than they would have
+ had if their husbands had never died.
+\end_layout
+
+\begin_layout Subsection
+Differences-in-differences under Parallel Trends and No Anticipation
+\end_layout
+
+\begin_layout Standard
+Let 
+\begin_inset Formula $s<e\leq t<e'$
+\end_inset
+
+ and consider this estimator:
+\begin_inset Formula 
+\begin{align*}
+\mathrm{DiD}_{t,s}(e,e') & \equiv\left(\mathbb{E}\left[Y_{it}\big|E_{i}=e\right]-\mathbb{E}\left[Y_{is}\big|E_{i}=e\right]\right)-\left(\mathbb{E}\left[Y_{it}\big|E_{i}=e'\right]-\mathbb{E}\left[Y_{is}\big|E_{i}=e'\right]\right)
+\end{align*}
+
+\end_inset
+
+which depends only on observable quantities.
+ 
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Theorem 1:
+\series default
+\bar default
+ If Parallel Trends and No Anticipation hold, then 
+\begin_inset Formula $\mathrm{DiD}_{t,s}(e,e')=\mathrm{ATT}_{t}(e)$
+\end_inset
+
+ if 
+\begin_inset Formula $s<e\leq t<e'$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Proof of Theorem 1:
+\bar default
+ 
+\series default
+We start with 
+\begin_inset Formula $\mathrm{ATT}_{t}(e)$
+\end_inset
+
+ and show that it equals 
+\begin_inset Formula $\mathrm{DiD}_{t,s}(e,e')$
+\end_inset
+
+.
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+This proof is essentially an abbreviated version of the proof of Proposition
+ 4 in 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "AbrahamSun2018"
+literal "false"
+
+\end_inset
+
+ in the case of a single control cohort 
+\begin_inset Formula $e'$
+\end_inset
+
+.
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Enumerate
+We add and subtract 
+\begin_inset Formula $Y_{s}^{\infty}$
+\end_inset
+
+:
+\begin_inset Formula 
+\begin{align*}
+\mathrm{ATT}_{t}(e)\equiv\mathbb{E}\left[Y_{t}^{e}-Y_{t}^{\infty}|E=e\right] & =\mathbb{E}\left[Y_{t}^{e}-Y_{{\color{red}s}}^{\infty}|E=e\right]-\mathbb{E}\left[Y_{t}^{\infty}-Y_{{\color{red}s}}^{\infty}|E=e\right]
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Enumerate
+We apply Parallel Trends:
+\begin_inset Formula 
+\begin{align*}
+\mathrm{ATT}_{t}(e) & =\mathbb{E}\left[Y_{t}^{e}-Y_{s}^{\infty}|E=e\right]-\mathbb{E}\left[Y_{t}^{\infty}-Y_{s}^{\infty}|E={\color{red}e'}\right]
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Enumerate
+No Anticipation lets us replace some of these 
+\begin_inset Formula $Y^{\infty}$
+\end_inset
+
+ terms with 
+\begin_inset Formula $Y^{e}$
+\end_inset
+
+ or 
+\begin_inset Formula $Y^{e'}$
+\end_inset
+
+ terms:
+\begin_inset Formula 
+\begin{align*}
+\mathrm{ATT}_{t}(e) & =\mathbb{E}\left[Y_{t}^{e}-Y_{s}^{{\color{red}e}}|E=e\right]-\mathbb{E}\left[Y_{t}^{{\color{red}e'}}-Y_{s}^{{\color{red}e'}}|E=e'\right]\equiv\mathrm{DiD}_{t,s}(e,e')
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Definition: Perfect Control Group:
+\series default
+\bar default
+ We see from the above result that a Perfect Control Group for treated cohort
+ 
+\begin_inset Formula $e$
+\end_inset
+
+ during the years 
+\begin_inset Formula $t<e'$
+\end_inset
+
+ is any cohort 
+\begin_inset Formula $e'$
+\end_inset
+
+ that satisfies both Parallel Trends and No Anticipation.
+ Note: A perfect control group may be a future winner 
+\begin_inset Formula $e'<\infty$
+\end_inset
+
+ or a never-winner 
+\begin_inset Formula $e'=\infty$
+\end_inset
+
+, it just depends on the empirical context.
+\end_layout
+
+\begin_layout Section
+Identification with Imperfect Control Groups
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename fadlon_ideal.pdf
+	lyxscale 50
+	scale 40
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+No Anticipation
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename fadlon_anticipation.pdf
+	lyxscale 50
+	scale 40
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+\begin_inset Formula $k=2$
+\end_inset
+
+ Years of Anticipation
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Anticipation in Example 1
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+vspace{.1cm}
+\end_layout
+
+\begin_layout Plain Layout
+
+
+\backslash
+footnotesize
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\emph on
+Notes:
+\emph default
+ Here, we consider the model with 
+\begin_inset Formula $Y_{t}^{\infty}=0.75-0.005\left(t-1990\right),\forall t$
+\end_inset
+
+ for the 
+\begin_inset Formula $E_{i}=2000$
+\end_inset
+
+ cohort, and 
+\begin_inset Formula $Y_{t}^{\infty}=0.70-0.005\left(t-1990\right),\forall t$
+\end_inset
+
+ for the 
+\begin_inset Formula $E_{i}=1995$
+\end_inset
+
+ cohort.
+ Clearly, this satisfies the Parallel Trends assumption, since 
+\begin_inset Formula $\mathbb{E}\left[Y_{is}\left(\infty\right)-Y_{it}\left(\infty\right)\big|E_{i}=1995\right]=\mathbb{E}\left[Y_{is}\left(\infty\right)-Y_{it}\left(\infty\right)\big|E_{i}=2000\right]=0.005\left(t-s\right)$
+\end_inset
+
+.
+ In Figure (a), we also impose No Anticipation, so cohort 
+\begin_inset Formula $E=2000$
+\end_inset
+
+ is clearly a Perfect Control Group for the 
+\begin_inset Formula $E=1995$
+\end_inset
+
+ cohort during the years prior to 
+\begin_inset Formula $t=2000$
+\end_inset
+
+.
+ In Figure (b), we relax No Anticipation for 
+\begin_inset Formula $k=2$
+\end_inset
+
+ years prior to the event.
+ As discussed in the text, this means that cohort 
+\begin_inset Formula $E=2000$
+\end_inset
+
+ is still a valid control group for the 
+\begin_inset Formula $E=1995$
+\end_inset
+
+ cohort during the years prior to when anticipation begins in year 
+\begin_inset Formula $t=1998=2000-k$
+\end_inset
+
+.
+ The true treatment effect is 
+\begin_inset Formula $-0.1$
+\end_inset
+
+.
+ In Figure (b), the anticipation effect is 
+\begin_inset Formula $-0.05$
+\end_inset
+
+.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+An imperfect control group for winners at 
+\begin_inset Formula $e$
+\end_inset
+
+ is a cohort of winners 
+\begin_inset Formula $e'$
+\end_inset
+
+ (or never-winners 
+\begin_inset Formula $e'=\infty$
+\end_inset
+
+) that either fails to satisfy Parallel Trends or fails to satisfy No Anticipati
+on.
+ We now consider various types of imperfect control groups and show conditions
+ under which we can still identify some of the 
+\begin_inset Formula $\mathrm{ATT}_{t}\left(e\right)$
+\end_inset
+
+ terms.
+\end_layout
+
+\begin_layout Subsection
+Parallel Trends Holds, but Anticipation Occurs for the 
+\begin_inset Formula $k$
+\end_inset
+
+ Years before the Event
+\end_layout
+
+\begin_layout Subsubsection
+What Can Be Identified with No Restrictions on Anticipation?
+\end_layout
+
+\begin_layout Standard
+Suppose that winning is anticipated 
+\begin_inset Formula $k>0$
+\end_inset
+
+ years before it happens.
+ The anticipation at 
+\begin_inset Formula $t$
+\end_inset
+
+ means that 
+\begin_inset Formula $Y_{t}^{e'}\neq Y_{t}^{\infty}$
+\end_inset
+
+ for 
+\begin_inset Formula $t\geq e'-k$
+\end_inset
+
+, so the substitution 
+\begin_inset Formula $\mathbb{E}\left[Y_{t}^{{\color{red}\infty}}|E=e'\right]=\mathbb{E}\left[Y_{t}^{{\color{red}e'}}|E=e'\right]$
+\end_inset
+
+ is no longer true, so Theorem 1 fails.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Figure 1
+\series default
+\bar default
+ shows the following:
+\end_layout
+
+\begin_layout Itemize
+In Figure 1(a), there is no anticipation, so 
+\begin_inset Formula $e'=2000$
+\end_inset
+
+ is a valid control group for 
+\begin_inset Formula $e=1995$
+\end_inset
+
+ as long as 
+\begin_inset Formula $t<e$
+\end_inset
+
+; in particular, 
+\begin_inset Formula $\mathbb{E}\left[Y_{t}^{\infty}\big|E=2000\right]=\mathbb{E}\left[Y_{t}\big|E=2000\right]=0.75-0.005t$
+\end_inset
+
+, where 
+\begin_inset Formula $-0.005t$
+\end_inset
+
+ is the assumed common time trend for all cohorts.
+ 
+\end_layout
+
+\begin_layout Itemize
+In Figure 1(b), there is 
+\begin_inset Formula $k=2$
+\end_inset
+
+ years of anticipation, so 
+\begin_inset Formula $e'=2000$
+\end_inset
+
+ is a valid control group for 
+\begin_inset Formula $e=1995$
+\end_inset
+
+ only on 
+\begin_inset Formula $t<e'-k$
+\end_inset
+
+.
+ We can see that 
+\begin_inset Formula $\mathbb{E}\left[Y_{1999}^{\infty}|E=2000\right]=0.75$
+\end_inset
+
+, but 
+\begin_inset Formula $\mathbb{E}\left[Y_{1999}|E=2000\right]=0.65$
+\end_inset
+
+ due to anticipation, so clearly 
+\begin_inset Formula $\mathbb{E}\left[Y_{1999}|E=2000\right]\neq\mathbb{E}\left[Y_{1999}^{\infty}|E=2000\right]$
+\end_inset
+
+, so 
+\begin_inset Formula $E=2000$
+\end_inset
+
+ fails as a control group when 
+\begin_inset Formula $t=1999$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+As illustrated with the shaded area in Figure 1(b), the 
+\begin_inset Formula $E=2000$
+\end_inset
+
+ cohort is still a valid control group for the 
+\begin_inset Formula $E=1995$
+\end_inset
+
+ cohort during any 
+\begin_inset Formula $t<1998$
+\end_inset
+
+, that is, any year prior to when 
+\begin_inset Formula $E=2000$
+\end_inset
+
+ begins to anticipate treatment.
+ This makes clear the cost of having an imperfect control group: we can
+ only identify 
+\begin_inset Formula $\mathrm{ATT}_{t}$
+\end_inset
+
+ for 
+\begin_inset Formula $t<1998$
+\end_inset
+
+ in Figure 1(b), whereas we can identify 
+\begin_inset Formula $\mathrm{ATT}_{t}\left(e\right)$
+\end_inset
+
+ for 
+\begin_inset Formula $t=1998,1999$
+\end_inset
+
+ as well in Figure 1(a).
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+If anticipation occurs for 
+\begin_inset Formula $k=\infty$
+\end_inset
+
+ years prior to the event, then 
+\begin_inset Formula $E=2000$
+\end_inset
+
+ is never a valid control group for 
+\begin_inset Formula $E=1995$
+\end_inset
+
+, as emphasized by 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "BorusyakJaravel2017"
+literal "false"
+
+\end_inset
+
+.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+What Can Be Identified under Parallel Anticipation?
+\end_layout
+
+\begin_layout Standard
+Finally, we show that, since the anticipation effect is identified for cohort
+ 
+\begin_inset Formula $e$
+\end_inset
+
+, we can correct for the anticipation in cohort 
+\begin_inset Formula $e'$
+\end_inset
+
+ if they both anticipate in the same way.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Definition: Parallel Anticipation:
+\series default
+\bar default
+ Denoting 
+\begin_inset Formula $t'\equiv t+\left(e'-e\right)$
+\end_inset
+
+, we say that two cohorts have parallel anticipation effects if 
+\begin_inset Formula $\mathbb{E}\left[Y_{t}^{e}-Y_{t}^{\infty}\big|E=e\right]=\mathbb{E}\left[Y_{t'}^{e'}-Y_{t'}^{\infty}\big|E=e'\right]$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Theorem 2:
+\series default
+\bar default
+ If Parallel Trends holds, No Anticipation holds on 
+\begin_inset Formula $e-k<t$
+\end_inset
+
+, and Parallel Anticipation holds, then 
+\end_layout
+
+\begin_layout Itemize
+(a) 
+\begin_inset Formula $\mathrm{DiD}_{t,s}(e,e')=\mathrm{ATT}_{t}(e)$
+\end_inset
+
+ on 
+\begin_inset Formula $e-k<t$
+\end_inset
+
+ for 
+\begin_inset Formula $s<e\leq t<e'$
+\end_inset
+
+, and, 
+\end_layout
+
+\begin_layout Itemize
+(b) 
+\begin_inset Formula $\mathrm{DiD}_{t,s}(e,e')+\mathrm{DiD}_{s,s'}(e,e')=\mathrm{ATT}_{t}(e)$
+\end_inset
+
+ for 
+\begin_inset Formula $e-k\leq s<e<t<e'$
+\end_inset
+
+, where 
+\begin_inset Formula $s'=e-\left(e'-t\right)$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Sketch of Proof:
+\series default
+\bar default
+ Theorem 2(a) is the same as Theorem 1, just for a smaller range of years.
+ Theorem 2(b) is proven by showing that 
+\begin_inset Formula $\mathrm{DiD}_{t,s}(e,e')=\mathrm{ATT}_{t}(e)-\mathrm{ATT}_{t-k'}(e)$
+\end_inset
+
+ for some 
+\begin_inset Formula $k\geq k'>0$
+\end_inset
+
+, then we choose 
+\begin_inset Formula $s'=t-k'$
+\end_inset
+
+ and see that 
+\begin_inset Formula $\mathrm{ATT}_{t-k'}(e)=\mathrm{DiD}_{s,s'}(e,e')$
+\end_inset
+
+ under Parallel Anticipation, so we just add 
+\begin_inset Formula $\mathrm{DiD}_{s,s'}(e,e')$
+\end_inset
+
+ to 
+\begin_inset Formula $\mathrm{DiD}_{t,s}(e,e')$
+\end_inset
+
+ as a bias correction.
+\end_layout
+
+\begin_layout Subsection
+No Anticipation Holds, but Parallel Trends Fails in a Parametric Way
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename fadlon_lineardiff.pdf
+	lyxscale 50
+	scale 45
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Raw Data
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename fadlon_lineardiffresid.pdf
+	lyxscale 50
+	scale 45
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Removing the Linear Trends
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Non-Parallel but Linear Trends in Example 1
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+vspace{.1cm}
+\end_layout
+
+\begin_layout Plain Layout
+
+
+\backslash
+footnotesize
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\emph on
+Notes:
+\emph default
+ Here, we consider the model with 
+\begin_inset Formula $Y_{t}^{\infty}=0.70-0.01\left(t-1990\right)$
+\end_inset
+
+ for the 
+\begin_inset Formula $E_{i}=2000$
+\end_inset
+
+ cohort, and 
+\begin_inset Formula $Y_{t}^{\infty}=0.75-0.02\left(t-1990\right)$
+\end_inset
+
+ for the 
+\begin_inset Formula $E_{i}=1995$
+\end_inset
+
+ cohort.
+ The true treatment effect is 
+\begin_inset Formula $-0.1$
+\end_inset
+
+.
+ In Figure (b), we replace the 
+\begin_inset Formula $E=2000$
+\end_inset
+
+ time-trend 
+\begin_inset Formula $-0.01\left(t-1990\right)$
+\end_inset
+
+ with the 
+\begin_inset Formula $E=1995$
+\end_inset
+
+ time-trend 
+\begin_inset Formula $-0.02\left(t-1990\right)$
+\end_inset
+
+ so that it satisfies Parallel Trends.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Suppose that the cohort treated at 
+\begin_inset Formula $e$
+\end_inset
+
+ and the cohort treated at 
+\begin_inset Formula $e'$
+\end_inset
+
+ would have different trends if never treated.
+ Because there is No Anticipation, any differences in the trends for cohorts
+ 
+\begin_inset Formula $e$
+\end_inset
+
+ and 
+\begin_inset Formula $e'$
+\end_inset
+
+ at time 
+\begin_inset Formula $t<e$
+\end_inset
+
+ must be exactly equal to the deviation from Parallel Trends and implies
+ that we can correct for the differential trends by estimating them in the
+ pre-period.
+ We now show this formally and illustrate it in Figure 2.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Corollary 1:
+\series default
+\bar default
+ If No Anticipation holds, 
+\begin_inset Formula $\mathbb{E}\left[Y_{is}\left(\infty\right)-Y_{it}\left(\infty\right)\big|E_{i}=e\right]=\mathbb{E}\left[Y_{is}-Y_{it}\big|E_{i}=e\right]$
+\end_inset
+
+ if 
+\begin_inset Formula $s<t<e<e'$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+\bar under
+Proof of Corollary 1:
+\series default
+\bar default
+ This is simply substituting that 
+\begin_inset Formula $Y_{it}\left(\infty\right)=Y_{it}\left(e\right)$
+\end_inset
+
+ if 
+\begin_inset Formula $t<e$
+\end_inset
+
+ by No Anticipation.
+\end_layout
+
+\begin_layout Standard
+Denote the deviation from Parallel Trends by 
+\begin_inset Formula $\psi_{t,s}\left(e,e'\right)\equiv\mathbb{E}\left[Y_{is}\left(\infty\right)-Y_{it}\left(\infty\right)\big|E_{i}=e\right]-\mathbb{E}\left[Y_{is}\left(\infty\right)-Y_{it}\left(\infty\right)\big|E_{i}=e'\right]$
+\end_inset
+
+.
+ 
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Corollary 2:
+\series default
+\bar default
+ If No Anticipation holds, then 
+\begin_inset Formula $\psi_{t,s}\left(e,e'\right)=\mathbb{E}\left[Y_{is}-Y_{it}\big|E_{i}=e\right]-\mathbb{E}\left[Y_{is}-Y_{it}\big|E_{i}=e'\right]$
+\end_inset
+
+ if 
+\begin_inset Formula $s<t<e<e'$
+\end_inset
+
+, where the right-hand side is observable.
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+\bar under
+Proof of Corollary 2:
+\series default
+\bar default
+ This is just plugging in Corollary 1 for both 
+\begin_inset Formula $e$
+\end_inset
+
+ and 
+\begin_inset Formula $e'$
+\end_inset
+
+ into the definition of 
+\begin_inset Formula $\psi_{t,s}\left(e,e'\right)$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+We have shown the the deviation from Parallel Trends is observable if No
+ Anticipation holds.
+ We can then use this to see if it follows a parametric trend, such as linearity.
+ Finally, if we assume that the parametric trend is the same at 
+\begin_inset Formula $t\geq e$
+\end_inset
+
+ as it is at 
+\begin_inset Formula $t<e$
+\end_inset
+
+, we can correct for the non-parallel trends on 
+\begin_inset Formula $t\geq e$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Theorem 3:
+\series default
+\bar default
+ If No Anticipation holds, then 
+\begin_inset Formula $\mathrm{DiD}_{t,s}(e,e')=\mathrm{ATT}_{t}(e)+\psi_{t,s}\left(e,e'\right)$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+\bar under
+Proof of Theorem 3:
+\series default
+\bar default
+ This follows from the proof of Theorem 1, but including the term 
+\begin_inset Formula $\psi_{t,s}\left(e,e'\right)$
+\end_inset
+
+ in step 2 when subsituting in for the pre-trend.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Figure 2
+\series default
+\bar default
+ illustrates how to use the observed pre-trend at time 
+\begin_inset Formula $t<e$
+\end_inset
+
+ to correct for the non-parallel trend for all 
+\begin_inset Formula $t$
+\end_inset
+
+.
+ The same approach can be used to correct for any parametric function 
+\begin_inset Formula $\psi_{t,s}\left(e,e'\right)$
+\end_inset
+
+.
+ This is an extrapolation approach: we observe the deviation from parallel
+ in the pre-period, extrapolate what the deviation will be in the post-period,
+ then correct the 
+\begin_inset Formula $e'$
+\end_inset
+
+ cohort so that it becomes parallel.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Graphics
+	filename fadlon_neitherholds.pdf
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Neither No Anticipation nor Parallel Trends in Example 1
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+vspace{.1cm}
+\end_layout
+
+\begin_layout Plain Layout
+
+
+\backslash
+footnotesize
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\emph on
+Notes:
+\emph default
+ Suppose the economist only observes the solid lines for years 1990-2000.
+ Here, we consider the model with 
+\begin_inset Formula $Y_{t}^{\infty}=0.70-0.03\left(t-1990\right)$
+\end_inset
+
+ for the 
+\begin_inset Formula $E_{i}=1995$
+\end_inset
+
+ cohort, and 
+\begin_inset Formula $Y_{t}^{\infty}=0.70-0.03\left(t-1990\right)+0.001\left(t-1990\right)^{2}$
+\end_inset
+
+ for the 
+\begin_inset Formula $E_{i}=2000$
+\end_inset
+
+ cohort, which are shown with the dashed lines.
+ The anticipation effects are 
+\begin_inset Formula $0.005$
+\end_inset
+
+, 
+\begin_inset Formula $0.015$
+\end_inset
+
+, and 
+\begin_inset Formula $0.025$
+\end_inset
+
+ during the 3 years prior to the event.
+ The true treatment effect is 
+\begin_inset Formula $-0.05$
+\end_inset
+
+ (the difference between the black solid and dashed lines), but the DiD
+ estimate (the difference between the solid red and black lines) is about
+ 
+\begin_inset Formula $-0.20$
+\end_inset
+
+ in 
+\begin_inset Formula $t=1999$
+\end_inset
+
+ (4 times the true effect in magnitude), despite the solid lines coinciding
+ almost perfectly in 
+\begin_inset Formula $t<1995$
+\end_inset
+
+.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Can We Learn Anything if Neither Assumption Holds?
+\end_layout
+
+\begin_layout Standard
+The results in the previous section suggest the following:
+\end_layout
+
+\begin_layout Itemize
+Given No Anticipation, we can test for Parallel Trends and use the data
+ to choose the design;
+\end_layout
+
+\begin_layout Itemize
+Given Parallel Trends, we can test for No Anticipation and use the data
+ to choose the design.
+\end_layout
+
+\begin_layout Standard
+So that is the beginning of the analysis – either we start by believing
+ in Parallel Trends, or we start by believing in No Anticipation, and then
+ we can test/correct for the other.
+ This is where choosing the empirical context is important: just as we look
+ for instruments that are 
+\emph on
+ex ante
+\emph default
+ as-good-as-random in IV applications, we look for events that are 
+\emph on
+ex ante
+\emph default
+ as-good-as-parallel or as-good-as-unanticipated in event studies.
+\end_layout
+
+\begin_layout Standard
+To illustrate why we need 
+\emph on
+either
+\emph default
+ No Anticipation 
+\emph on
+or
+\emph default
+ Parallel Trends to get anywhere in an event study, 
+\series bold
+\bar under
+Figure 3
+\series default
+\bar default
+ provides an example where the observed pre-trends 
+\begin_inset Quotes eld
+\end_inset
+
+look nice,
+\begin_inset Quotes erd
+\end_inset
+
+ but both No Anticipation and Parallel Trends fail, amd this causes the
+ DiD estimator to be severely biased.
+ Clearly, we can't use the approaches above to correct for deviations in
+ the pre-trends because there are no deviations in the pre-trends, and we
+ can't correct for anticipation because they match perfectly in the years
+ where anticipation would be expected.
+\end_layout
+
+\begin_layout Section
+Regression Estimators and Stacking Cohorts
+\end_layout
+
+\begin_layout Subsection
+Regressions with Perfect Control Groups
+\end_layout
+
+\begin_layout Subsubsection
+1 Treatment Cohort and 1 Control Cohort
+\end_layout
+
+\begin_layout Standard
+Suppose that any cohort 
+\begin_inset Formula $e'>e$
+\end_inset
+
+ is a Perfect Control Group for 
+\begin_inset Formula $e$
+\end_inset
+
+ (that is, it satisfies both Parallel Trends and No Anticipation).
+ Since,
+\begin_inset Formula 
+\begin{align*}
+\mathrm{DiD}_{t,s}(e,e') & \equiv\left(\mathbb{E}\left[Y_{it}\big|E_{i}=e\right]-\mathbb{E}\left[Y_{is}\big|E_{i}=e\right]\right)-\left(\mathbb{E}\left[Y_{it}\big|E_{i}=e'\right]-\mathbb{E}\left[Y_{is}\big|E_{i}=e'\right]\right)
+\end{align*}
+
+\end_inset
+
+It is easy to show that, if we estimate the following regression,
+\begin_inset Formula 
+\[
+Y_{it}=\alpha(e,e')+\delta(e,e')1_{t}+\tau(e,e')1_{e}+\gamma_{t,s}(e,e')1_{t}1_{e}+\epsilon_{it},\;\mathit{for}\;E_{i}\in\left\{ e,e'\right\} \;\mathit{and}\;s<e\leq t<e'
+\]
+
+\end_inset
+
+then OLS returns 
+\begin_inset Formula $\gamma_{t,s}(e,e')=\mathrm{DiD}_{t,s}(e,e')$
+\end_inset
+
+.
+ If 
+\begin_inset Formula $e'$
+\end_inset
+
+ is a Perfect Control Group for 
+\begin_inset Formula $e$
+\end_inset
+
+, it follows that 
+\begin_inset Formula $\gamma_{t,s}(e,e')=\mathit{ATT}_{t}(e)$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsubsection
+1 Treatment Cohort and 
+\begin_inset Formula $M$
+\end_inset
+
+ Control Cohorts
+\end_layout
+
+\begin_layout Standard
+Suppose we have cohorts 
+\begin_inset Formula $e<e'<e''$
+\end_inset
+
+.
+ Then, we can write,
+\begin_inset Formula 
+\begin{align*}
+Y_{it} & =\alpha(e,e')+\delta(e,e')1_{t}+\tau(e,e')1_{e}+\gamma_{t,s}(e,e')1_{t}1_{e}+\epsilon_{it},\;\mathit{for}\;E_{i}\in\left\{ e,e'\right\} \;\mathit{and}\;s<e\leq t<e'\\
+Y_{it} & =\alpha(e,e'')+\delta(e,e'')1_{t}+\tau(e,e'')1_{e}+\gamma_{t,s}(e,e'')1_{t}1_{e}+\epsilon_{it},\;\mathit{for}\;E_{i}\in\left\{ e,e''\right\} \;\mathit{and}\;s<e\leq t<e''
+\end{align*}
+
+\end_inset
+
+If both 
+\begin_inset Formula $e$
+\end_inset
+
+ and 
+\begin_inset Formula $e'$
+\end_inset
+
+ are Perfect Control Groups at the same 
+\begin_inset Formula $t$
+\end_inset
+
+, then 
+\begin_inset Formula $\gamma_{t,s}(e,e')=\gamma_{t,s}(e,e'')$
+\end_inset
+
+.
+ For the years satisfying 
+\begin_inset Formula $s<e\leq t<e'<e''$
+\end_inset
+
+ (so that 
+\begin_inset Formula $e'$
+\end_inset
+
+ and 
+\begin_inset Formula $e''$
+\end_inset
+
+ are both valid control groups for 
+\begin_inset Formula $e$
+\end_inset
+
+), we can recover 
+\begin_inset Formula $\gamma_{t,s}$
+\end_inset
+
+ in a single regression with both control cohorts by 
+\begin_inset Quotes eld
+\end_inset
+
+stacking
+\begin_inset Quotes erd
+\end_inset
+
+ them into a single equation as follows:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{align*}
+Y_{it} & =\alpha(e,\{e',e''\})+\delta(e,\{e',e''\})1_{t}+\tau(e,\{e',e''\})1_{e}+\gamma_{t,s}(e,\{e',e''\})1_{t}1_{e}+\epsilon_{it},\;\mathit{for}\;E_{i}\in\left\{ e,e',e''\right\} \;\mathit{and}\;s<e\leq t<e'<e''
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The stacked regression says that, during the years 
+\begin_inset Formula $t$
+\end_inset
+
+ in which both 
+\begin_inset Formula $e'$
+\end_inset
+
+ and 
+\begin_inset Formula $e''$
+\end_inset
+
+ are control groups, we can use both 
+\begin_inset Formula $e'$
+\end_inset
+
+ and 
+\begin_inset Formula $e''$
+\end_inset
+
+ when estimating the parameters.
+ The 
+\begin_inset Formula $\delta_{t}$
+\end_inset
+
+ will use all 3 cohorts to estimate the year effect; the 
+\begin_inset Formula $\delta_{e}$
+\end_inset
+
+ cohort will be the average difference at 
+\begin_inset Formula $s$
+\end_inset
+
+ between cohort 
+\begin_inset Formula $e$
+\end_inset
+
+ and the other two cohorts (weighted by number of observations for each
+ of the other two cohorts); and 
+\begin_inset Formula $\gamma_{t,s}$
+\end_inset
+
+ will pick up the DiD estimator of the form,
+\begin_inset Formula 
+\begin{align*}
+\mathrm{DiD}_{t,s}(e,\{e',e''\}) & \equiv\left(\mathbb{E}\left[Y_{it}\big|E_{i}=e\right]-\mathbb{E}\left[Y_{is}\big|E_{i}=e\right]\right)-\left(\mathbb{E}\left[Y_{it}\big|E_{i}=e'\;\mathit{or}\;E_{i}=e''\right]-\mathbb{E}\left[Y_{is}\big|E_{i}=e'\;\mathit{or}\;E_{i}=e''\right]\right)
+\end{align*}
+
+\end_inset
+
+where all that has changed is that the conditioning set for the second differenc
+e includes both cohorts 
+\begin_inset Formula $e'$
+\end_inset
+
+ and 
+\begin_inset Formula $e''$
+\end_inset
+
+.
+ 
+\end_layout
+
+\begin_layout Standard
+Note that, under the assumptions, having more control cohorts improves precision
+ of the estimator by increasing sample size, but does not affect identification.
+ Note also that the control groups available for different 
+\begin_inset Formula $t$
+\end_inset
+
+ times will vary.
+ For example, if the data is from 2001-2006 and 
+\begin_inset Formula $e=2003$
+\end_inset
+
+, then cohorts 
+\begin_inset Formula $e'\in\left\{ 2004,2005,2006\right\} $
+\end_inset
+
+ will be available for 
+\begin_inset Formula $t=2003$
+\end_inset
+
+, 
+\begin_inset Formula $e'\in\left\{ 2005,2006\right\} $
+\end_inset
+
+ will be available for 
+\begin_inset Formula $t=2004$
+\end_inset
+
+, and 
+\begin_inset Formula $e'=2006$
+\end_inset
+
+ will be available for 
+\begin_inset Formula $t=2005$
+\end_inset
+
+.
+ If the pre-period is 
+\begin_inset Formula $s=2001$
+\end_inset
+
+, then all of these control cohorts 
+\begin_inset Formula $e'\in\left\{ 2004,2005,2006\right\} $
+\end_inset
+
+ are available for the pre-period.
+ This means it is important to be careful to use the same cohorts that are
+ available at 
+\begin_inset Formula $t$
+\end_inset
+
+ when estimating the mean at 
+\begin_inset Formula $s$
+\end_inset
+
+; otherwise, the difference 
+\begin_inset Formula $\left(\mathbb{E}\left[Y_{it}\big|E_{i}=e'\;\mathit{or}\;E_{i}=e''\right]-\mathbb{E}\left[Y_{is}\big|E_{i}=e'\;\mathit{or}\;E_{i}=e''\right]\right)$
+\end_inset
+
+ will be affected by composition changes between 
+\begin_inset Formula $s$
+\end_inset
+
+ and 
+\begin_inset Formula $t$
+\end_inset
+
+ rather than only by the time effects this term is meant to capture.
+ This is done mechanically by including intercepts for each cohort.
+\end_layout
+
+\begin_layout Subsubsection
+\begin_inset Formula $L$
+\end_inset
+
+ Treatment Cohorts and 
+\begin_inset Formula $M$
+\end_inset
+
+ Control Cohorts
+\end_layout
+
+\begin_layout Standard
+Notice that, when there are two control cohorts, there are also two treatment
+ cohorts, since the middle cohort can be used both as a treated and control
+ cohort.
+ Let's consider the simplest case where 
+\begin_inset Formula $e=e'-1=e''-2$
+\end_inset
+
+ so that 
+\begin_inset Formula $e,e',e''$
+\end_inset
+
+ are each in adjacent years.
+ Then, 
+\begin_inset Formula $e''$
+\end_inset
+
+ can be used twice as a control group – it can be the control group for
+ 
+\begin_inset Formula $e$
+\end_inset
+
+ both at 
+\begin_inset Formula $t=e$
+\end_inset
+
+ and 
+\begin_inset Formula $t=e'$
+\end_inset
+
+, and as the control group for 
+\begin_inset Formula $e'$
+\end_inset
+
+ at 
+\begin_inset Formula $t=e'$
+\end_inset
+
+.
+ Let's focus on 
+\begin_inset Formula $t=e$
+\end_inset
+
+ and 
+\begin_inset Formula $s<e$
+\end_inset
+
+:
+\begin_inset Formula 
+\begin{align*}
+Y_{it} & =\alpha(e,\{e',e''\})+\delta(e,\{e',e''\})1_{t=e}+\tau(e,\{e',e''\})1_{e}+\gamma_{t=e,s}(e,\{e',e''\})1_{t=e}1_{e}+\epsilon_{it},\;\mathit{for}\;E_{i}\in\left\{ e,e',e''\right\} \;\mathit{and}\;t\in\left\{ s,e\right\} \\
+Y_{it} & =\alpha(e',e'')+\delta(e',e'')1_{t=e+1}+\tau(e',e'')1_{e+1}+\gamma_{t=e+1,s}(e',e'')1_{t=e+1}1_{e'}+\epsilon_{it},\;\mathit{for}\;E_{i}\in\left\{ e',e''\right\} \;\mathit{and}\;t\in\left\{ s,e+1\right\} 
+\end{align*}
+
+\end_inset
+
+The first equation identifies 
+\begin_inset Formula $\mathit{ATT}_{t=e}(e)$
+\end_inset
+
+ when pooling the 
+\begin_inset Formula $e',e''$
+\end_inset
+
+ cohorts as control groups.
+ The last equation identifies 
+\begin_inset Formula $\gamma_{t=e+1,s}(e',e'')=\mathit{ATT}_{t=e+1}(e')$
+\end_inset
+
+ using the 
+\begin_inset Formula $e''$
+\end_inset
+
+ cohort as the control group.
+ Importantly, the control group in the first equation 
+\begin_inset Formula $e'$
+\end_inset
+
+ is the treatment group in the second equation.
+\end_layout
+
+\begin_layout Standard
+How can we run a single regression that correctly uses 
+\begin_inset Formula $e'$
+\end_inset
+
+ as the control group for 
+\begin_inset Formula $e$
+\end_inset
+
+ but also uses 
+\begin_inset Formula $e'$
+\end_inset
+
+ as a treatment group where 
+\begin_inset Formula $e''$
+\end_inset
+
+ is its control group? We can do this by 
+\series bold
+stacking the data
+\series default
+ with duplicates and introducing the reference cohort variable, 
+\begin_inset Formula $r$
+\end_inset
+
+.
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+Several recent studies use such a stacking approach with various choices
+ of control group, including 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "FadlonNielsen2017"
+literal "false"
+
+\end_inset
+
+, 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "DeshpandeLi2018"
+literal "false"
+
+\end_inset
+
+, and 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "Jensen2018"
+literal "false"
+
+\end_inset
+
+.
+ 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "BorusyakJaravel2017"
+literal "false"
+
+\end_inset
+
+ also suggest a subsample regression approach similar to the stacking approach
+ as a potential solution to negative weighting issues of more typical dynamic
+ event study regression specifications when cohorts have heterogeneous ATT
+ effects.
+ As an alternative, 
+\begin_inset CommandInset citation
+LatexCommand citet
+key "AbrahamSun2018"
+literal "false"
+
+\end_inset
+
+ propose a regression approach that does not require stacking, but instead
+ relies on using a single control cohort (the cohort with the latest treatment
+ onset time) to identify all cohort-specific ATT effects.
+\end_layout
+
+\end_inset
+
+ In the first equation, 
+\begin_inset Formula $r=e$
+\end_inset
+
+ is the reference cohort for both 
+\begin_inset Formula $e'$
+\end_inset
+
+ and 
+\begin_inset Formula $e''$
+\end_inset
+
+.
+ In the second equation, 
+\begin_inset Formula $r=e'$
+\end_inset
+
+ is the reference cohort for 
+\begin_inset Formula $e''$
+\end_inset
+
+.
+ So there are two copies of the 
+\begin_inset Formula $e'$
+\end_inset
+
+ observation, but one is coded with 
+\begin_inset Formula $r=e$
+\end_inset
+
+ and the other is coded with 
+\begin_inset Formula $r=e'$
+\end_inset
+
+.
+ Then, to estimate 
+\begin_inset Formula $\gamma_{t=e,s}(e,\{e',e''\})$
+\end_inset
+
+, we fully interact the regression that uses 
+\begin_inset Formula $e$
+\end_inset
+
+ as the treatment group and 
+\begin_inset Formula $e',e''$
+\end_inset
+
+ as the control groups with an indicator 
+\begin_inset Formula $1_{r=e}$
+\end_inset
+
+, and to estimate 
+\begin_inset Formula $\gamma_{t=e+1,s}(e',e'')$
+\end_inset
+
+, we fully interact the regression that uses 
+\begin_inset Formula $e'$
+\end_inset
+
+ as the treatment group and 
+\begin_inset Formula $e''$
+\end_inset
+
+ as the control group with an indicator 
+\begin_inset Formula $1_{r=e'}$
+\end_inset
+
+.
+ Then, we can estimate both regressions simultaneously, since they are fully
+ interacted with the 
+\begin_inset Formula $1_{r}$
+\end_inset
+
+ indicators so that it is equivalent to estimating the two regressions separatel
+y.
+ Given the stacked representation with reference cohort interactions, we
+ can consider the following assumption:
+\end_layout
+
+\begin_layout Standard
+
+\bar under
+Definition: Homogeneous ATT in Event Time:
+\bar default
+ We say the 
+\begin_inset Formula $\mathrm{ATT}$
+\end_inset
+
+ is homogeneous in event time if 
+\begin_inset Formula $\mathrm{ATT}_{t}\left(e\right)=\mathrm{ATT}_{t'}\left(e'\right)=\overline{\mathrm{ATT}}_{\mathit{post}}$
+\end_inset
+
+ , for all 
+\begin_inset Formula $e,e',t,t'$
+\end_inset
+
+, where 
+\begin_inset Formula $\mathit{post}\equiv e'-e$
+\end_inset
+
+ and 
+\begin_inset Formula $t'\equiv t+\mathit{post}$
+\end_inset
+
+.
+ 
+\end_layout
+
+\begin_layout Standard
+To impose homogeneity in our regression representation, we want 
+\begin_inset Formula $\gamma_{t=e,s}(e,\{e',e''\})=\gamma_{t=e+1,s}(e',e'')$
+\end_inset
+
+, but we still want to allow for 
+\begin_inset Formula $\delta(e,\{e',e''\})\neq\delta(e',e'')$
+\end_inset
+
+ and 
+\begin_inset Formula $\tau(e,\{e',e''\})\neq\tau(e',e'')$
+\end_inset
+
+.
+ This is easy in our reference-cohort representation: we simply drop the
+ interaction with 
+\begin_inset Formula $1_{r}$
+\end_inset
+
+ with each of the 
+\begin_inset Formula $\gamma$
+\end_inset
+
+ terms so that the regression will force 
+\begin_inset Formula $\gamma_{t=e,s}(e,\{e',e''\})=\gamma_{t=e+1,s}(e',e'')$
+\end_inset
+
+.
+ This is equivalent to a GMM estimator where we estimate the first regression
+ separately from the second regression, but impose a penalty on deviations
+ from 
+\begin_inset Formula $\gamma_{t=e,s}(e,\{e',e''\})=\gamma_{t=e+1,s}(e',e'')$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+This extends to the general case: we can always account for 
+\begin_inset Formula $L$
+\end_inset
+
+ treatment cohorts and 
+\begin_inset Formula $M$
+\end_inset
+
+ control cohorts by reframing it as each 1 treatment cohort matched to as
+ many control cohorts as possible for each outcome time 
+\begin_inset Formula $t$
+\end_inset
+
+, then fully interacting each of these regressions with the treatment reference
+ cohort indicator 
+\begin_inset Formula $1_{r}$
+\end_inset
+
+.
+ We present the general case in 
+\series bold
+\bar under
+Figure 4
+\series default
+\bar default
+.
+ Here, we simulate data from a model with dynamic ATTs (across event time)
+ that are homogeneous (across cohorts).
+ The Perfect Control Group assumption is satisfied.
+ We compare estimates when allowing for heterogeneity across cohorts, the
+ Pooled estimate when imposing homogeneity in the estimator, and also compare
+ these to the standard DiD estimator that does not use stacking.
+ 
+\end_layout
+
+\begin_layout Standard
+We see that the true values are well recovered by the Pooled and Standard
+ DiD estimators, with some evidence that the Pooled standard errors are
+ tighter due to using more control observations in the central event times.
+ By contrast, the cohort-specific estimates are substantially more noisy
+ with larger standard errors, illustrating the benefit of imposing homogeneity
+ when the true model is homogeneous.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement t
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size1000_homogeneous.png
+	lyxscale 10
+	scale 10
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Small 
+\begin_inset Formula $N$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_homogeneous.png
+	lyxscale 10
+	scale 10
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Large 
+\begin_inset Formula $N$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Stacked Regression in Example 1
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+vspace{.1cm}
+\end_layout
+
+\begin_layout Plain Layout
+
+
+\backslash
+footnotesize
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\emph on
+Notes:
+\emph default
+ This figure presents estimates using the stacked regression described above
+ for small and large data simulations.
+ Each point estimate uses the maximum possible treatment and control observation
+s.
+ Results are presented without imposing homogeneity (each treatment cohort
+ has its own estimate) and imposing homogeneity (
+\begin_inset Quotes eld
+\end_inset
+
+Pooled
+\begin_inset Quotes erd
+\end_inset
+
+).
+ Finally, the standard DiD regression is presented which does not stack
+ data.
+ The true value is provided for comparison.
+ Note that the true model has homogeneous ATT effects across cohorts.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Regressions with Imperfect Control Groups
+\end_layout
+
+\begin_layout Subsubsection
+\begin_inset Formula $L$
+\end_inset
+
+ Treatment Cohorts and 
+\begin_inset Formula $M$
+\end_inset
+
+ Control Cohorts: No Anticipation Holds, but Trends are not Parallel
+\end_layout
+
+\begin_layout Standard
+Suppose that we are in the case where for all cohorts, No Anticipation holds,
+ however Parallel Trends does not hold.
+ As demonstrated in Figure 2, if the precise form of the deviation from
+ parallel trends, 
+\begin_inset Formula $\psi_{t,s}\left(e,e'\right)$
+\end_inset
+
+, is known, we could directly remove the bias due to differing parallel
+ trends from each observation of unit 
+\begin_inset Formula $i$
+\end_inset
+
+ at time 
+\begin_inset Formula $t$
+\end_inset
+
+ and proceed as in Section 3.1.3.
+ However, in practice, 
+\begin_inset Formula $\psi_{t,s}\left(e,e'\right)$
+\end_inset
+
+ is unknown.
+ Nonetheless, for a given parametric form, we may use the pre-treatment
+ observations 
+\begin_inset Formula $t<e$
+\end_inset
+
+ for each cohort to identify the cohort-specific components of the trend
+ (under the assumption that the pre-treatment trend continues unchanged
+ post-treatment).
+ Then, by residualizing the outcome 
+\begin_inset Formula $Y_{it}$
+\end_inset
+
+ with respect to the recovered trend component, we again regain Parallel
+ Trends and are back in the case in Section 3.1.3.
+ For example, suppose that the underlying deviation from parallel trends
+ is cohort-specific linear trends.
+ For exposition, let 
+\begin_inset Formula $t_{min}$
+\end_inset
+
+ denote each unit 
+\begin_inset Formula $i$
+\end_inset
+
+'s earliest calendar time observation.
+ To adjust for cohort-specific linear trends, we first restrict the sample
+ to observations 
+\begin_inset Formula $t<e$
+\end_inset
+
+ and consider the following regression:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{align*}
+Y_{it} & =\alpha+\psi_{e}1_{e}(t-t_{min})+\epsilon_{it},\;\mathit{for}\;\;t<e\\
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Next, we use the recovered slope parameters 
+\begin_inset Formula $\psi_{e}$
+\end_inset
+
+ from the above regression to construct the trend contribution to each 
+\begin_inset Formula $Y_{it}$
+\end_inset
+
+, 
+\begin_inset Formula $\tilde{Y_{it}}=\psi_{e}(t-t_{min})$
+\end_inset
+
+.
+ Finally, we produce residualized outcome data 
+\begin_inset Formula $\hat{Y_{it}}$
+\end_inset
+
+ 
+\begin_inset Formula $\equiv Y_{it}-\tilde{Y_{it}}$
+\end_inset
+
+.
+ Under the joint assumptions that the deviation from parallel trends takes
+ a cohort-specific linear form and that this trend persists post-treatment,
+ 
+\begin_inset Formula $\hat{Y_{it}}$
+\end_inset
+
+ would now satisfy both No Anticipation and Parallel Trends and we can proceed
+ with the approach in Section 3.1.3.
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+We ignore discussion of inference, however, given that this strategy would
+ rely on pre-estimated pre-trend parameters, one would want standard errors
+ on estimated ATT parameters to reflect this pre-estimation.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\bar under
+Figure 5
+\series default
+\bar default
+ demonstrates the correction for non-parallel trends with stacked data.
+ In Figure 5(a), we show how biased the estimators are when Parallel Trends
+ fails in a linear way.
+ In Figure 5(b), we correct the stacked estimators using the two-step approach
+ where we fit time-trends on pre-treatment data and then extrapolate those
+ trends on post-treatment time periods in order to residualize out the time
+ trends.
+ In the Standard DiD estimator, we include linear cohort-specific time-trends
+ in the regression.
+ We see that the corrections generally perform well, though standard DiD
+ is affected by large standard errors.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement t
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_trends.png
+	lyxscale 10
+	scale 10
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Linear Trends, No Correction
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_trends_corrected.png
+	lyxscale 10
+	scale 10
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Linear Trends, Corrected
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Stacked Regression with Linear (Non-parallel) Trends in Example 1
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+vspace{.1cm}
+\end_layout
+
+\begin_layout Plain Layout
+
+
+\backslash
+footnotesize
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\emph on
+Notes:
+\emph default
+ The true model has linear non-parallel trends.
+ This figure presents estimates using the stacked regression described above
+ (a) not corrected for non-parallel trends, and (b) correcting linearly
+ for non-parallel trends.
+ Each point estimate uses the maximum possible treatment and control observation
+s.
+ Results are presented without imposing homogeneity (each treatment cohort
+ has its own estimate) and imposing homogeneity (
+\begin_inset Quotes eld
+\end_inset
+
+Pooled
+\begin_inset Quotes erd
+\end_inset
+
+).
+ Finally, the standard DiD regression is presented which does not stack
+ data.
+ The true value is provided for comparison.
+ Note that the true model has homogeneous ATT effects across cohorts.
+ We use the two-step residualization method in each estimator except for
+ Standard DiD, where we follow standard practice by controlling for linear
+ cohort trends in the regression.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement t
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_anticipation.png
+	lyxscale 10
+	scale 10
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Anticipation, No Correction
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename ../code/eventStudy/inst/figures/event_time_all_seed1_size10000_anticipation_corrected.png
+	lyxscale 10
+	scale 10
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Anticipation, Corrected
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Stacked Regression with 2 Years of Anticipation in Example 1
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+vspace{.1cm}
+\end_layout
+
+\begin_layout Plain Layout
+
+
+\backslash
+footnotesize
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\emph on
+Notes:
+\emph default
+ The true model has 2 years of anticipation, and anticipation is heterogeneous
+ across cohorts.
+ This figure presents estimates using the stacked regression described above
+ (a) not corrected for 2 years of anticipation, and (b) correcting for 2
+ years of anticipation by restricting control groups.
+ Each point estimate uses the maximum possible treatment and control observation
+s.
+ Results are presented without imposing homogeneity (each treatment cohort
+ has its own estimate) and imposing homogeneity (
+\begin_inset Quotes eld
+\end_inset
+
+Pooled
+\begin_inset Quotes erd
+\end_inset
+
+).
+ Finally, the standard DiD regression is presented which does not stack
+ data.
+ The true value is provided for comparison.
+ Note that the true model has homogeneous ATT effects across cohorts.
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+\begin_inset Formula $L$
+\end_inset
+
+ Treatment Cohorts and 
+\begin_inset Formula $M$
+\end_inset
+
+ Control Cohorts: Parallel Trends Holds, but there is Anticipation
+\end_layout
+
+\begin_layout Standard
+Suppose that we are in the case where for all cohorts, Parallel Trends holds,
+ but No Anticipation does not hold; that is, for each treated cohort with
+ onset time 
+\begin_inset Formula $e$
+\end_inset
+
+, individuals begin adjusting their outcome in anticipation of treatment
+ as of period 
+\begin_inset Formula $e-k$
+\end_inset
+
+, 
+\begin_inset Formula $k>0$
+\end_inset
+
+.
+ As discussed in Section 2.1.1, for a given cohort 
+\begin_inset Formula $e,$
+\end_inset
+
+ anticipation is analogous to moving the treatment onset time for all later
+ cohorts 
+\begin_inset Formula $k$
+\end_inset
+
+ periods into the future.
+ This mapping suggests how we adjust the approach in Section 3.1.3 for a given
+ anticipation period - when stacking control observations for a given reference
+ cohort 
+\begin_inset Formula $r=e,$
+\end_inset
+
+ only use 
+\begin_inset Formula $E_{i}\in\{e'\,|\,e'>e+k\}$
+\end_inset
+
+.
+ For example, consider the case with with five adjacent cohorts, i.e., 
+\begin_inset Formula $e=e'-1=e''-2=e'''-3=e''''-4$
+\end_inset
+
+ and suppose 
+\begin_inset Formula $k=2$
+\end_inset
+
+, meaning that all cohorts begin adjusting their outomc in anticipation
+ of being treated two periods prior to treatment onset.
+ Unlike in Section 3.1.3, for 
+\begin_inset Formula $t=e$
+\end_inset
+
+, we could no longer include 
+\begin_inset Formula $\{e',e''\}$
+\end_inset
+
+ in the set of control groups.
+ Thus, for the reference cohort 
+\begin_inset Formula $r=e,$
+\end_inset
+
+ the underlying regression for the 
+\begin_inset Formula $r=e$
+\end_inset
+
+ subsample would now be
+\begin_inset Formula 
+\begin{align*}
+Y_{it} & =\alpha(e,\{e''',e''''\})+\delta(e,\{e''',e''''\})1_{t=e}+\tau(e,\{e''',e''''\})1_{e}+\gamma_{t=e,s}(e,\{e''',e''''\})1_{t=e}1_{e}+\epsilon_{it},\\
+ & \;\mathit{for}\;E_{i}\in\left\{ e,e''',e''''\right\} \;\mathit{and}\;t\in\left\{ s,e\right\} 
+\end{align*}
+
+\end_inset
+
+Otherwise, the approach to recover the identified ATT effects proceeds as
+ in Section 3.1.3.
+ 
+\end_layout
+
+\begin_layout Standard
+In 
+\series bold
+\bar under
+Figure 6
+\series default
+\bar default
+, we introduce 
+\begin_inset Formula $k=2$
+\end_inset
+
+ periods of anticipation.
+ Figure 6(a) demonstrates the bias in the estimators when not accounting
+ for this anticipation.
+ Note that, as long as the reference event time is prior to anticipation
+ (event time -3 in the figure), the standard DiD performs well with anticipation.
+ In Figure 6(b), we correct for anticipation in the stacked estimators by
+ limiting which control cohorts are used to be at least two cohorts ahead.
+ As a result, we cannot estimate as many effects across event times.
+ Note: Standard DiD would be able to correct for anticipation if anticipation
+ were homogeneous across cohorts, as Standard DiD implicitly includes a
+ correction for homogeneous anticipation.
+\end_layout
+
+\begin_layout Section
+Code
+\end_layout
+
+\begin_layout Standard
+We wrote a software package in R, called eventStudy, which makes everything
+ here extremely easy.
+ To install the software in R, just type 
+\size footnotesize
+\color blue
+install.packages(
+\begin_inset Quotes eld
+\end_inset
+
+eventStudy
+\begin_inset Quotes erd
+\end_inset
+
+)
+\size default
+\color inherit
+.
+\end_layout
+
+\begin_layout Subsection*
+Stacking/Correcting the Data
+\end_layout
+
+\begin_layout Standard
+It takes one line of code to construct the stacked data and correct for
+ anticipation if needed:
+\end_layout
+
+\begin_layout Verse
+
+\size footnotesize
+\color blue
+stacked_data = ES_clean_data(data, min_control_gap = 1, max_control_gap
+ = Inf, omitted_event_time = -2)
+\end_layout
+
+\begin_layout Itemize
+You can change the omitted event time by setting, for example, 
+\size footnotesize
+\color blue
+omitted_event_time = -2
+\size default
+\color inherit
+.
+ 
+\end_layout
+
+\begin_layout Itemize
+You can set a minimum gap before using a control cohort (to correct for
+ anticipation) by setting, for example, 
+\size footnotesize
+\color blue
+min_control_gap = 3
+\size default
+\color inherit
+.
+ 
+\end_layout
+
+\begin_layout Itemize
+You can also set a maximum control cohort, e.g., FN use 5 cohorts ahead only,
+ which you can do in our command by setting 
+\size footnotesize
+\color blue
+min_control_gap = 5
+\size default
+\color inherit
+ and 
+\size footnotesize
+\color blue
+max_control_gap = 5
+\size default
+\color inherit
+.
+\end_layout
+
+\begin_layout Standard
+Finally, to correct for linear deviations from Parallel Trends, simply do
+ this before running ES_clean_data:
+\end_layout
+
+\begin_layout Verse
+
+\size footnotesize
+\color blue
+data = ES_parallelize_trends(data)
+\end_layout
+
+\begin_layout Subsection*
+ATT Estimation
+\end_layout
+
+\begin_layout Standard
+It takes one line of code to run the estimator on the stacked data and find
+ the dynamic ATTs:
+\end_layout
+
+\begin_layout Verse
+
+\size footnotesize
+\color blue
+results = ES_estimate_ATT(stacked_data, homogeneous_ATT = FALSE, omitted_event_t
+ime = -2)
+\end_layout
+
+\begin_layout Standard
+where 
+\size footnotesize
+\color blue
+homogeneous_ATT=TRUE
+\size default
+\color inherit
+ would instead impose homogeneity and the omitted event time should be set
+ to match the one used when stacking the data.
+\end_layout
+
+\begin_layout Standard
+For convenience, we also provide an implementation of the Standard DiD estimator
+,
+\end_layout
+
+\begin_layout Verse
+
+\size footnotesize
+\color blue
+standard_results = ES_estimate_std_did(data, cohort_specific_trends = FALSE,
+ omitted_event_time = -2)
+\end_layout
+
+\begin_layout Standard
+where 
+\size footnotesize
+\color blue
+cohort_specific_trends=TRUE
+\size default
+\color inherit
+ would include the linear time trends by cohort.
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset bibtex
+LatexCommand bibtex
+btprint "btPrintCited"
+bibfiles "event_study"
+options "bibtotoc,ecta"
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
