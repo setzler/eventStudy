@@ -12,6 +12,7 @@ dd <- data.table(year = 1990:2005)
 
 dd[year < 1995, cohort1995noantic := .7]
 dd[year >= 1995, cohort1995noantic := .6]
+dd[, cohort1995noantic_never := .7]
 
 dd[year < 1993, cohort1995antic := .7]
 dd[year >= 1993 & year <= 1994, cohort1995antic := .65]
@@ -19,12 +20,13 @@ dd[year >= 1995, cohort1995antic := .6]
 
 dd[year < 1995+5, cohort2000noantic := .75]
 dd[year >= 1995+5, cohort2000noantic := .65]
+dd[, cohort2000noantic_never := .75]
 
 dd[year < 1993+5, cohort2000antic := .75]
 dd[year >= 1993+5 & year <= 1994+5, cohort2000antic := .7]
 dd[year >= 1995+5, cohort2000antic := .65]
 
-for(var in c("cohort1995noantic","cohort1995antic","cohort2000noantic","cohort2000antic")){
+for(var in c("cohort1995noantic","cohort1995antic","cohort2000noantic","cohort2000antic","cohort1995noantic_never","cohort2000noantic_never")){
   dd[, (var) := get(var) - 0.005*(year-1990)]
 }
 
@@ -32,6 +34,8 @@ for(var in c("cohort1995noantic","cohort1995antic","cohort2000noantic","cohort20
 gg <- ggplot(aes(x=year),data=dd) +
   geom_line(aes(y=cohort1995noantic), color = "black") + geom_point(aes(y=cohort1995noantic,colour="E=1995")) +
   geom_line(aes(y=cohort2000noantic), color = "red") + geom_point(aes(y=cohort2000noantic,colour="E=2000")) +
+  geom_line(aes(y=cohort1995noantic_never), color = "black", linetype="dashed") +
+  geom_line(aes(y=cohort2000noantic_never), color = "red", linetype="dashed") +
   scale_y_continuous(breaks= pretty_breaks(),limits=c(0.4,0.8)) +
   scale_x_continuous(breaks= pretty_breaks(),limits=c(1990,2005)) +
   theme_bw(base_size = 16) +
@@ -48,6 +52,8 @@ ggsave(gg,file="fadlon_ideal.pdf",width=8,height=5)
 gg <- ggplot(aes(x=year),data=dd) +
   geom_line(aes(y=cohort1995antic), color = "black") + geom_point(aes(y=cohort1995antic,colour="E=1995")) +
   geom_line(aes(y=cohort2000antic), color = "red") + geom_point(aes(y=cohort2000antic,colour="E=2000")) +
+  geom_line(aes(y=cohort1995noantic_never), color = "black", linetype="dashed") +
+  geom_line(aes(y=cohort2000noantic_never), color = "red", linetype="dashed") +
   scale_y_continuous(breaks= pretty_breaks(),limits=c(0.4,0.8)) +
   scale_x_continuous(breaks= pretty_breaks(),limits=c(1990,2005)) +
   theme_bw(base_size = 16) +
