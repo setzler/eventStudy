@@ -1618,11 +1618,11 @@ Y_{it} & =\alpha(e,e'')+\delta(e,e'')1_{t}+\tau(e,e'')1_{e}+\gamma_{t,s}(e,e'')1
 \end_inset
 
 If both 
-\begin_inset Formula $e$
+\begin_inset Formula $e'$
 \end_inset
 
  and 
-\begin_inset Formula $e'$
+\begin_inset Formula $e''$
 \end_inset
 
  are Perfect Control Groups at the same 
