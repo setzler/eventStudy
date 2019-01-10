@@ -7,7 +7,9 @@ ES_clean_data <- function(long_data,
                           onset_time_var,
                           min_control_gap = 1,
                           max_control_gap = Inf,
-                          omitted_event_time = -2) {
+                          omitted_event_time = -2,
+                          control_subset_var=NA,
+                          control_subset_event=NA) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
@@ -160,9 +162,13 @@ ES_clean_data <- function(long_data,
   possible_treated_control <- NULL
   gc()
   stack_across_cohorts_balanced_treated_control <- rbindlist(stack_across_cohorts_balanced_treated_control, use.names = TRUE)
-  message <- "Successfully produced a stacked dataset."
 
-  flog.info(message)
+  if(!is.na(control_subset_var)){
+    stack_across_cohorts_balanced_treated_control[, valid_control_group := max(as.integer(get(control_subset_var)*(ref_event_time==control_subset_event))), by=c(unitvar,ref_onset_time)]
+    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1 | treated==1]
+  }
+
+  flog.info("Successfully produced a stacked dataset.")
   return(stack_across_cohorts_balanced_treated_control)
 }
 
