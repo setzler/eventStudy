@@ -7,16 +7,11 @@ options(warn=1)
 
 
 library(data.table)
-library(testthat)
 library(futile.logger)
 library(lfe)
-library(multiwayvcov)
-library(lmtest)
 library(ggplot2)
 library(scales)
 library(eventStudy)
-
-
 
 
 main_figs <- function(){
@@ -77,6 +72,33 @@ antic_figs <- function(){
   results[[2]] = c(event_time_1_coh_2002, event_time_1_coh_2002_corrected)
 
   return(results)
+
+}
+
+subset_figs <- function(){
+
+  u = 1e4
+  s = 1
+
+  results_control_subset = ES_simulate_estimator_comparison(units = u, seed = s, homogeneous_ATT = TRUE, control_subset = TRUE)
+  fig = results_control_subset[[1]]
+  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_control_subset.png", s, u), width = 12, height = 5)
+  sample_control_subset = results_control_subset[[2]]
+  sample_control_subset[, subsetting := "control"]
+
+  results_treated_subset = ES_simulate_estimator_comparison(units = u, seed = s, homogeneous_ATT = TRUE, treated_subset = TRUE)
+  fig = results_treated_subset[[1]]
+  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_treated_subset.png", s, u), width = 12, height = 5)
+  sample_treated_subset = results_treated_subset[[2]]
+  sample_treated_subset[, subsetting := "treated"]
+
+  results_both_subset = ES_simulate_estimator_comparison(units = u, seed = s, homogeneous_ATT = TRUE, control_subset = TRUE, treated_subset = TRUE)
+  fig = results_both_subset[[1]]
+  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_both_subset.png", s, u), width = 12, height = 5)
+  sample_both_subset = results_both_subset[[2]]
+  sample_both_subset[, subsetting := "both"]
+
+  results = rbindlist(list(sample_control_subset, sample_treated_subset, sample_both_subset), use.names = TRUE)
 
 }
 

@@ -11,7 +11,9 @@ ES_simulate_data <- function(units = 1e4,
                              cohort_specific_trends = FALSE,
                              post_treat_dynamics = TRUE,
                              anticipation = FALSE,
-                             cohort_specific_anticipation = FALSE) {
+                             cohort_specific_anticipation = FALSE,
+                             treated_subset = FALSE,
+                             control_subset = FALSE) {
 
   Units <- 1:units
   Times <- min_cal_time:max_cal_time
@@ -143,6 +145,11 @@ ES_simulate_data <- function(units = 1e4,
     sim_data[event_time < 0, outcome := outcome + (event_time==(-2))*antic_1 + (event_time==(-1))*antic_2]
   }
 
+  if(treated_subset == T | control_subset == T){
+    sim_data[, subset_var := tin %% 2]
+
+  }
+
   output <- list()
   output[[1]] <- sim_data
   output[[2]] <- params
@@ -165,7 +172,9 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                              max_control_gap = Inf,
                                              min_control_gap = 1,
                                              homogeneous_ATT = TRUE,
-                                             cohort_specific_anticipation = FALSE) {
+                                             cohort_specific_anticipation = FALSE,
+                                             treated_subset = FALSE,
+                                             control_subset = FALSE) {
   set.seed(seed)
 
   sim_result <- ES_simulate_data(units,
@@ -173,7 +182,9 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                  cohort_specific_trends = cohort_specific_trends,
                                  anticipation = anticipation,
                                  homogeneous_ATT = homogeneous_ATT,
-                                 cohort_specific_anticipation = cohort_specific_anticipation)
+                                 cohort_specific_anticipation = cohort_specific_anticipation,
+                                 treated_subset = treated_subset,
+                                 control_subset = control_subset)
 
   if (correct_pre_trends == TRUE) {
     long_data <- ES_parallelize_trends(long_data = sim_result[[1]],outcomevar = "outcome",cal_time_var = "tax_yr",onset_time_var = "win_yr"
@@ -188,17 +199,59 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     cohort_specific_antic_params <- sim_result[[3]]
   }
 
-
-  ES_data <- ES_clean_data(
-    long_data = long_data,
-    outcomevar = "outcome",
-    unit_var = "tin",
-    cal_time_var = "tax_yr",
-    onset_time_var = "win_yr",
-    min_control_gap = min_control_gap,
-    max_control_gap = max_control_gap,
-    omitted_event_time = omitted_event_time
-  )
+  if(treated_subset==T & control_subset==F){
+    ES_data <- ES_clean_data(
+      long_data = long_data,
+      outcomevar = "outcome",
+      unit_var = "tin",
+      cal_time_var = "tax_yr",
+      onset_time_var = "win_yr",
+      min_control_gap = min_control_gap,
+      max_control_gap = max_control_gap,
+      omitted_event_time = omitted_event_time,
+      treated_subset_var = "subset_var",
+      treated_subset_event_time = -1
+    )
+  } else if(treated_subset==F & control_subset==T){
+    ES_data <- ES_clean_data(
+      long_data = long_data,
+      outcomevar = "outcome",
+      unit_var = "tin",
+      cal_time_var = "tax_yr",
+      onset_time_var = "win_yr",
+      min_control_gap = min_control_gap,
+      max_control_gap = max_control_gap,
+      omitted_event_time = omitted_event_time,
+      control_subset_var = "subset_var",
+      control_subset_event_time = -1
+    )
+  } else if(treated_subset==T & control_subset==T){
+    ES_data <- ES_clean_data(
+      long_data = long_data,
+      outcomevar = "outcome",
+      unit_var = "tin",
+      cal_time_var = "tax_yr",
+      onset_time_var = "win_yr",
+      min_control_gap = min_control_gap,
+      max_control_gap = max_control_gap,
+      omitted_event_time = omitted_event_time,
+      treated_subset_var = "subset_var",
+      treated_subset_event_time = -1,
+      control_subset_var = "subset_var",
+      control_subset_event_time = -1
+    )
+  } else{
+    ES_data <- ES_clean_data(
+      long_data = long_data,
+      outcomevar = "outcome",
+      unit_var = "tin",
+      cal_time_var = "tax_yr",
+      onset_time_var = "win_yr",
+      min_control_gap = min_control_gap,
+      max_control_gap = max_control_gap,
+      omitted_event_time = omitted_event_time
+    )
+  }
 
   mean2003_2002 = mean(ES_data[win_yr == 2002 & tax_yr == 2003]$outcome)
   mean1999_2002 = mean(ES_data[win_yr == 2002 & tax_yr == 1999]$outcome)
@@ -219,6 +272,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
 
   ES_results_hetero <- ES_estimate_ATT(
     ES_data = ES_data,
+    outcomevar = "outcome",
     onset_time_var = "win_yr",
     cluster_vars = c("tin", "tax_yr"),
     homogeneous_ATT = FALSE,
@@ -227,6 +281,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
 
   ES_results_homo <- ES_estimate_ATT(
     ES_data = ES_data,
+    outcomevar = "outcome",
     onset_time_var = "win_yr",
     cluster_vars = c("tin", "tax_yr"),
     homogeneous_ATT = TRUE,

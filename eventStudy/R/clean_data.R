@@ -8,8 +8,10 @@ ES_clean_data <- function(long_data,
                           min_control_gap = 1,
                           max_control_gap = Inf,
                           omitted_event_time = -2,
+                          treated_subset_var=NA,
+                          treated_subset_event_time=NA,
                           control_subset_var=NA,
-                          control_subset_event=NA) {
+                          control_subset_event_time=NA) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
@@ -67,7 +69,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control <- list()
 
     possible_treated_control[[1]] <- input_dt[get(onset_time_var) == e,
-      c(outcomevar, unit_var, cal_time_var, onset_time_var),
+      na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
       with = FALSE
     ]
     gc()
@@ -75,7 +77,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control[[1]][, treated := 1]
 
     possible_treated_control[[2]] <- input_dt[between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
-      c(outcomevar, unit_var, cal_time_var, onset_time_var),
+      na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
       with = FALSE
     ]
     gc()
@@ -150,7 +152,7 @@ ES_clean_data <- function(long_data,
     balanced_treated_control <- na.omit(balanced_treated_control)
     gc()
 
-    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, c(outcomevar, unit_var, cal_time_var, onset_time_var, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated"), with = FALSE]
+    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var ,"ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
     gc()
 
     balanced_treated_control <- NULL
@@ -163,9 +165,15 @@ ES_clean_data <- function(long_data,
   gc()
   stack_across_cohorts_balanced_treated_control <- rbindlist(stack_across_cohorts_balanced_treated_control, use.names = TRUE)
 
+  if(!is.na(treated_subset_var)){
+    stack_across_cohorts_balanced_treated_control[, valid_treated_group := max(as.integer(get(treated_subset_var)*(ref_event_time==treated_subset_event_time))), by=c(unit_var, "ref_onset_time")]
+  } else{
+    stack_across_cohorts_balanced_treated_control[, valid_treated_group := treated]
+  }
+
   if(!is.na(control_subset_var)){
-    stack_across_cohorts_balanced_treated_control[, valid_control_group := max(as.integer(get(control_subset_var)*(ref_event_time==control_subset_event))), by=c(unitvar,ref_onset_time)]
-    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1 | treated==1]
+    stack_across_cohorts_balanced_treated_control[, valid_control_group := max(as.integer(get(control_subset_var)*(ref_event_time==control_subset_event_time))), by=c(unit_var, "ref_onset_time")]
+    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1 | (treated==1 & valid_treated_group==1)]
   }
 
   flog.info("Successfully produced a stacked dataset.")
