@@ -38,12 +38,13 @@ ES_simulate_data <- function(units = 1e4,
 
   # Different initial condition by cohort (just to generate level differences)
   cohort_fes <- data.table(win_yr = sort(unique(sim_data$win_yr)), alpha_e = runif(uniqueN(sim_data$win_yr), min = 0.6, max = 0.9))
+  sim_data <- merge(sim_data, cohort_fes, by = "win_yr")
+  gc()
 
   # Generic (but parallel) trend
   tax_yr_fes <- data.table(tax_yr = sort(unique(sim_data$tax_yr)), delta_t = runif(uniqueN(sim_data$tax_yr), min = -0.1, max = 0.1))
-
-  sim_data <- merge(sim_data, cohort_fes, by = "win_yr")
   sim_data <- merge(sim_data, tax_yr_fes, by = "tax_yr")
+  gc()
 
   if (homogeneous_ATT == FALSE) {
 
@@ -54,12 +55,12 @@ ES_simulate_data <- function(units = 1e4,
       te_0 = (-2:3 - 3.5) / 10
     )
 
-    # No anticipation; nonlinear cohort-specific dynamics (growing TE) after "on-impact"
+    # Nonlinear cohort-specific dynamics (growing TE) after "on-impact"
     # will do a quadratic in event_time post-treatment with cohort-specific loadings
     cohort_specific_post_linear <- data.table(
       win_yr = sort(unique(sim_data$win_yr)),
-      # trend_load = c(-0.01788569, -0.01061920, -0.01784453, -0.01432203, -0.01355335, -0.02377261)
-      trend_load = (-2:3 - 3.5) / 100
+      # linear_load = c(-0.01788569, -0.01061920, -0.01784453, -0.01432203, -0.01355335, -0.02377261)
+      linear_load = (-2:3 - 3.5) / 100
     )
     cohort_specific_post_quad <- data.table(
       win_yr = sort(unique(sim_data$win_yr)),
@@ -74,18 +75,19 @@ ES_simulate_data <- function(units = 1e4,
     sim_data <- merge(sim_data, cohort_specific_te_0, by = "win_yr")
     sim_data <- merge(sim_data, cohort_specific_post_linear, by = "win_yr")
     sim_data <- merge(sim_data, cohort_specific_post_quad, by = "win_yr")
+    gc()
   } else {
 
     # Homogeneous on-impact treatment effect by cohort
     te_0 <- -0.2431251
 
-    # No anticipation; nonlinear cohort-specific dynamics (growing TE) after "on-impact"
-    # will do a quadratic in event_time post-treatment with cohort-specific loadings
-    trend_load <- -0.01784453
+    # Nonlinear homogeneous dynamics (growing TE) after "on-impact"
+    # will do a quadratic in event_time post-treatment
+    linear_load <- -0.01784453
     quad_load <- -0.0001432203
 
-    params <- c(te_0, trend_load, quad_load)
-    names(params) <- c("te_0", "trend_load", "quad_load")
+    params <- c(te_0, linear_load, quad_load)
+    names(params) <- c("te_0", "linear_load", "quad_load")
   }
 
   if (cohort_specific_trends == TRUE) {
@@ -97,25 +99,19 @@ ES_simulate_data <- function(units = 1e4,
     )
     sim_data <- merge(sim_data, cohort_specific_cal_time_trend, by = "win_yr")
     sim_data[, delta_t := delta_t + (tax_yr - min_cal_time) * cal_linear_trend]
+    gc()
   }
 
-
-  setorderv(sim_data, c("tin", "tax_yr"))
-  sim_data[, event_time := tax_yr - win_yr]
-
-  # Have all the ingredients in place to determine the observed outcome, but for structural error
-  sim_data[, epsilon := rnorm(dim(sim_data)[1], mean = 0, sd = epsilon_sd)]
-
   if (post_treat_dynamics == FALSE & homogeneous_ATT == TRUE) {
-    trend_load <- 0
+    linear_load <- 0
     quad_load <- 0
 
-    params[names(params) %in% c("trend_load", "quad_load")] <- 0
+    params[names(params) %in% c("linear_load", "quad_load")] <- 0
   } else if (post_treat_dynamics == FALSE & homogeneous_ATT == FALSE) {
-    sim_data[, trend_load := 0]
+    sim_data[, linear_load := 0]
     sim_data[, quad_load := 0]
 
-    params[, trend_load := 0]
+    params[, linear_load := 0]
     params[, quad_load := 0]
   }
 
@@ -134,20 +130,62 @@ ES_simulate_data <- function(units = 1e4,
 
     sim_data <- merge(sim_data, cohort_specific_antic_params, by = "win_yr")
     cohort_specific_antic_params[, win_yr := as.character(win_yr)]
+    gc()
 
   }
 
+  if(treated_subset == T & control_subset == F){
+    # Still need to come up with a more interesting illustration here
+    sim_data[, subset_var := tin %% 2]
+  } else if(treated_subset == F & control_subset == T){
+    # Still need to come up with a more interesting illustration here
+    sim_data[, subset_var := tin %% 2]
+  } else if(treated_subset == T & control_subset == T){
+
+    # Different calendar time trends by binary subset_var (i.e., conditional parallel trends)
+    # Furthermore, will skew subset_var towards 1 earlier in the sample
+
+    cohort_specific_subset_propensity <- data.table(
+      win_yr = sort(unique(sim_data$win_yr)),
+      pr_subset = (7:2 + 0.5)/10
+    )
+
+    sim_data <- merge(sim_data, cohort_specific_subset_propensity, by = "win_yr")
+    gc()
+
+    sim_data[, subset_index := runif(1, min = 0, max = 1), list(tin)]
+    sim_data[, subset_var := as.integer(subset_index <= pr_subset)]
+
+    tax_yr_fes_subset0 <- data.table(tax_yr = sort(unique(sim_data$tax_yr)),
+                                     subset_delta_t = sort(runif(uniqueN(sim_data$tax_yr), min = 0.10, max = 0.20)),
+                                     subset_var = 0)
+    tax_yr_fes_subset1 <- data.table(tax_yr = sort(unique(sim_data$tax_yr)),
+                                     subset_delta_t = sort(runif(uniqueN(sim_data$tax_yr), min = -0.20, max = -0.10), decreasing = TRUE),
+                                     subset_var = 1)
+
+    tax_yr_fes_subset <- rbindlist(list(tax_yr_fes_subset0, tax_yr_fes_subset1), use.names = TRUE)
+    sim_data <- merge(sim_data, tax_yr_fes_subset, by = c("tax_yr", "subset_var"))
+    gc()
+
+    sim_data[, delta_t := subset_delta_t]
+    sim_data[, c("pr_subset", "subset_index", "subset_delta_t") := NULL]
+    gc()
+
+    print(tax_yr_fes_subset)
+  }
+
+  setorderv(sim_data, c("tin", "tax_yr"))
+  sim_data[, event_time := tax_yr - win_yr]
+
+  # Have all the ingredients in place to determine the observed outcome, but for structural error
+  sim_data[, epsilon := rnorm(dim(sim_data)[1], mean = 0, sd = epsilon_sd)]
+
   sim_data[, outcome := alpha_e + delta_t + epsilon]
-  sim_data[event_time >= 0, outcome := outcome + te_0 + (event_time * trend_load) + ((event_time)^2 * quad_load)]
+  sim_data[event_time >= 0, outcome := outcome + te_0 + (event_time * linear_load) + ((event_time)^2 * quad_load)]
   if(homogeneous_ATT == T & anticipation == T & cohort_specific_anticipation == F){
     sim_data[event_time < 0, outcome := outcome + (event_time==(-2))*antic_params[1] + (event_time==(-1))*antic_params[2]]
   } else if(homogeneous_ATT == T & anticipation == T & cohort_specific_anticipation == T){
     sim_data[event_time < 0, outcome := outcome + (event_time==(-2))*antic_1 + (event_time==(-1))*antic_2]
-  }
-
-  if(treated_subset == T | control_subset == T){
-    sim_data[, subset_var := tin %% 2]
-
   }
 
   output <- list()
@@ -174,7 +212,11 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                              homogeneous_ATT = TRUE,
                                              cohort_specific_anticipation = FALSE,
                                              treated_subset = FALSE,
-                                             control_subset = FALSE) {
+                                             treated_subset_event_time = -1,
+                                             correct_for_treated_subset = FALSE,
+                                             control_subset = FALSE,
+                                             control_subset_event_time = -1,
+                                             correct_for_control_subset = FALSE) {
   set.seed(seed)
 
   sim_result <- ES_simulate_data(units,
@@ -199,7 +241,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     cohort_specific_antic_params <- sim_result[[3]]
   }
 
-  if(treated_subset==T & control_subset==F){
+  if(treated_subset==T & control_subset==F & correct_for_treated_subset==T){
     ES_data <- ES_clean_data(
       long_data = long_data,
       outcomevar = "outcome",
@@ -210,9 +252,9 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
       max_control_gap = max_control_gap,
       omitted_event_time = omitted_event_time,
       treated_subset_var = "subset_var",
-      treated_subset_event_time = -1
+      treated_subset_event_time = treated_subset_event_time
     )
-  } else if(treated_subset==F & control_subset==T){
+  } else if(treated_subset==F & control_subset==T & correct_for_control_subset==T){
     ES_data <- ES_clean_data(
       long_data = long_data,
       outcomevar = "outcome",
@@ -223,9 +265,9 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
       max_control_gap = max_control_gap,
       omitted_event_time = omitted_event_time,
       control_subset_var = "subset_var",
-      control_subset_event_time = -1
+      control_subset_event_time = control_subset_event_time
     )
-  } else if(treated_subset==T & control_subset==T){
+  } else if(treated_subset==T & control_subset==T & correct_for_treated_subset==T & correct_for_control_subset==T){
     ES_data <- ES_clean_data(
       long_data = long_data,
       outcomevar = "outcome",
@@ -236,9 +278,9 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
       max_control_gap = max_control_gap,
       omitted_event_time = omitted_event_time,
       treated_subset_var = "subset_var",
-      treated_subset_event_time = -1,
+      treated_subset_event_time = treated_subset_event_time,
       control_subset_var = "subset_var",
-      control_subset_event_time = -1
+      control_subset_event_time = control_subset_event_time
     )
   } else{
     ES_data <- ES_clean_data(
@@ -288,15 +330,29 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     omitted_event_time = omitted_event_time
   )
 
-  es_results <- ES_estimate_std_did(
-    long_data = sim_result[[1]],
-    outcomevar = "outcome",
-    unit_var = "tin",
-    cal_time_var = "tax_yr",
-    onset_time_var = "win_yr",
-    cohort_specific_trends = correct_pre_trends,
-    omitted_event_time = omitted_event_time
-  )
+  if(treated_subset==T & control_subset==T & correct_for_treated_subset==T & correct_for_control_subset==T){
+    es_results <- ES_estimate_std_did(
+      long_data = sim_result[[1]],
+      outcomevar = "outcome",
+      unit_var = "tin",
+      cal_time_var = "tax_yr",
+      onset_time_var = "win_yr",
+      cohort_specific_trends = correct_pre_trends,
+      omitted_event_time = omitted_event_time,
+      std_subset_var = "subset_var",
+      std_subset_event_time = -1
+    )
+  } else{
+    es_results <- ES_estimate_std_did(
+      long_data = sim_result[[1]],
+      outcomevar = "outcome",
+      unit_var = "tin",
+      cal_time_var = "tax_yr",
+      onset_time_var = "win_yr",
+      cohort_specific_trends = correct_pre_trends,
+      omitted_event_time = omitted_event_time
+    )
+  }
 
   figdata <- rbindlist(list(ES_results_hetero, ES_results_homo, es_results), use.names = TRUE)
 
@@ -305,13 +361,13 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     # getting true value in
     figdata_temp <- copy(figdata)
     figdata_temp[, te_0 := params[1]]
-    figdata_temp[, trend_load := params[2]]
+    figdata_temp[, linear_load := params[2]]
     figdata_temp[, quad_load := params[3]]
     figdata_temp[event_time < 0, true_value := 0]
     if(anticipation){
       figdata_temp[event_time < 0, true_value := (event_time==(-2))*params[4] + (event_time==(-1))*params[5]]
     }
-    figdata_temp[event_time >= 0, true_value := te_0 + (event_time * trend_load) + ((event_time)^2 * quad_load)]
+    figdata_temp[event_time >= 0, true_value := te_0 + (event_time * linear_load) + ((event_time)^2 * quad_load)]
 
     figdata_temp <- figdata_temp[win_yr == "Standard DiD"]
     figdata_temp <- figdata_temp[, list(rn, win_yr, event_time, true_value)]
@@ -345,13 +401,13 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     # getting true value in
     figdata_temp <- copy(figdata)
     figdata_temp[, te_0 := params[1]]
-    figdata_temp[, trend_load := params[2]]
+    figdata_temp[, linear_load := params[2]]
     figdata_temp[, quad_load := params[3]]
     figdata_temp[event_time < 0, true_value := 0]
     if(anticipation == T & cohort_specific_anticipation == F){
       figdata_temp[event_time < 0, true_value := (event_time==(-2))*params[4] + (event_time==(-1))*params[5]]
     }
-    figdata_temp[event_time >= 0, true_value := te_0 + (event_time * trend_load) + ((event_time)^2 * quad_load)]
+    figdata_temp[event_time >= 0, true_value := te_0 + (event_time * linear_load) + ((event_time)^2 * quad_load)]
 
     figdata_temp = merge(figdata_temp, cohort_specific_antic_params, by = "win_yr", all = TRUE)
     figdata_temp[between(event_time, omitted_event_time, 0, incbounds = FALSE), true_value := (event_time==(-2))*antic_1 + (event_time==(-1))*antic_2]
@@ -395,7 +451,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     figdata_temp <- copy(figdata)
     figdata_temp = merge(figdata_temp, params, by = "win_yr", all = TRUE)
     figdata_temp[event_time < 0 & !(win_yr %in% c("Pooled", "Standard DiD")), true_value := 0]
-    figdata_temp[event_time >= 0, true_value := te_0 + (event_time * trend_load) + ((event_time)^2 * quad_load)]
+    figdata_temp[event_time >= 0, true_value := te_0 + (event_time * linear_load) + ((event_time)^2 * quad_load)]
 
     figdata_temp[, jitter := .GRP, by = win_yr]
 

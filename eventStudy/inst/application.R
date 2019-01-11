@@ -1,10 +1,9 @@
 rm(list = ls(all = TRUE))
 gc()
 
-options(scipen = 10000)
+options(scipen = 999)
 options(show.error.locations=TRUE)
 options(warn=1)
-
 
 library(data.table)
 library(futile.logger)
@@ -12,7 +11,6 @@ library(lfe)
 library(ggplot2)
 library(scales)
 library(eventStudy)
-
 
 main_figs <- function(){
 
@@ -80,26 +78,59 @@ subset_figs <- function(){
   u = 1e4
   s = 1
 
-  results_control_subset = ES_simulate_estimator_comparison(units = u, seed = s, homogeneous_ATT = TRUE, control_subset = TRUE)
+  results_no_subset = ES_simulate_estimator_comparison(units = u,
+                                                       seed = s,
+                                                       homogeneous_ATT = TRUE,
+                                                       control_subset = TRUE,
+                                                       treated_subset = TRUE,
+                                                       correct_for_control_subset = FALSE,
+                                                       correct_for_treated_subset = FALSE
+                                                       )
+  fig = results_no_subset[[1]]
+  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_cond_parallel_trends.png", s, u), width = 12, height = 5)
+  sample_no_subset = results_no_subset[[2]]
+  sample_no_subset[, subsetting := "none"]
+
+  results_control_subset = ES_simulate_estimator_comparison(units = u,
+                                                            seed = s,
+                                                            homogeneous_ATT = TRUE,
+                                                            control_subset = TRUE,
+                                                            correct_for_control_subset = TRUE,
+                                                            control_subset_event_time = -1
+                                                            )
   fig = results_control_subset[[1]]
-  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_control_subset.png", s, u), width = 12, height = 5)
+  # ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_control_subset.png", s, u), width = 12, height = 5)
   sample_control_subset = results_control_subset[[2]]
   sample_control_subset[, subsetting := "control"]
 
-  results_treated_subset = ES_simulate_estimator_comparison(units = u, seed = s, homogeneous_ATT = TRUE, treated_subset = TRUE)
+  results_treated_subset = ES_simulate_estimator_comparison(units = u,
+                                                            seed = s,
+                                                            homogeneous_ATT = TRUE,
+                                                            treated_subset = TRUE,
+                                                            correct_for_treated_subset = TRUE,
+                                                            treated_subset_event_time = -1
+                                                            )
   fig = results_treated_subset[[1]]
-  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_treated_subset.png", s, u), width = 12, height = 5)
+  # ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_treated_subset.png", s, u), width = 12, height = 5)
   sample_treated_subset = results_treated_subset[[2]]
   sample_treated_subset[, subsetting := "treated"]
 
-  results_both_subset = ES_simulate_estimator_comparison(units = u, seed = s, homogeneous_ATT = TRUE, control_subset = TRUE, treated_subset = TRUE)
+  results_both_subset = ES_simulate_estimator_comparison(units = u,
+                                                         seed = s,
+                                                         homogeneous_ATT = TRUE,
+                                                         control_subset = TRUE,
+                                                         treated_subset = TRUE,
+                                                         correct_for_control_subset = TRUE,
+                                                         correct_for_treated_subset = TRUE,
+                                                         control_subset_event_time = -1,
+                                                         treated_subset_event_time = -1)
   fig = results_both_subset[[1]]
-  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_both_subset.png", s, u), width = 12, height = 5)
+  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_cond_parallel_trends_corrected.png", s, u), width = 12, height = 5)
   sample_both_subset = results_both_subset[[2]]
   sample_both_subset[, subsetting := "both"]
 
-  results = rbindlist(list(sample_control_subset, sample_treated_subset, sample_both_subset), use.names = TRUE)
-
+  results = rbindlist(list(sample_no_subset, sample_control_subset, sample_treated_subset, sample_both_subset), use.names = TRUE)
+  return(results)
 }
 
 

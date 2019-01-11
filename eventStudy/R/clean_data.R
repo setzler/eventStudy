@@ -21,16 +21,8 @@ ES_clean_data <- function(long_data,
   # Restriction based on supplied omitted_event_time
 
   min_eligible_cohort = min(input_dt[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])
-  input_dt = input_dt[get(onset_time_var) >= min_eligible_cohort]; gc()
-
-  # if (!(first_onset_grp_time %in% onset_times)) {
-  #   message <- sprintf("Onset group %s is not among values of %s in input_dt", first_onset_grp_time, onset_time_var)
-  #   stop(message)
-  # }
-  # if (!(omitted_event_time %in% first_onset_grp_event_times)) {
-  #   message <- sprintf("Onset group %s does not have the supplied omitted_event_time (%s) in input_dt", min_onset_time, omitted_event_time)
-  #   stop(message)
-  # }
+  input_dt = input_dt[get(onset_time_var) >= min_eligible_cohort]
+  gc()
 
   # Setting up
 
@@ -69,17 +61,16 @@ ES_clean_data <- function(long_data,
     possible_treated_control <- list()
 
     possible_treated_control[[1]] <- input_dt[get(onset_time_var) == e,
-      na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
-      with = FALSE
-    ]
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
+                                              with = FALSE
+                                              ]
     gc()
     possible_treated_control[[1]][, ref_onset_time := e]
     possible_treated_control[[1]][, treated := 1]
 
     possible_treated_control[[2]] <- input_dt[between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
-      na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
-      with = FALSE
-    ]
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
+                                              with = FALSE]
     gc()
     possible_treated_control[[2]][, ref_onset_time := e]
     possible_treated_control[[2]][, treated := 0]
@@ -105,13 +96,6 @@ ES_clean_data <- function(long_data,
     max_control_cohort = max(possible_treated_control[[onset_time_var]])
     possible_treated_control <- possible_treated_control[treated == 1 & get(cal_time_var) < max_control_cohort - (min_control_gap - 1) | treated == 0 & get(cal_time_var) < get(onset_time_var)- (min_control_gap - 1)]
     gc()
-
-
-
-    # Code below prints to double check that above line worked
-    # for(w in sort(unique(possible_treated_control$win_yr))){
-    #   print(setorderv(possible_treated_control[get(onset_time_var) == w, .N, by = c(onset_time_var, "ref_event_time")], c(onset_time_var, "ref_event_time")))
-    # }
 
     i <- 0
 
@@ -143,10 +127,11 @@ ES_clean_data <- function(long_data,
       balanced_treated_control[[i]][, catt_specific_sample := i]
     }
 
-    # Now let's get all of these in one regression
-    # Will build up from the pieces of the prior step together with a catt_specific_sample dummy
+    possible_treated_control <- NULL
+    gc()
 
-    # print(sprintf("Started joint CATT(%s) regressions", e))
+    # Now let's get all of these in one stacked data set specific to cohort es
+    # Will build up from the pieces of the prior step together with a catt_specific_sample dummy
 
     balanced_treated_control <- rbindlist(balanced_treated_control, use.names = TRUE)
     balanced_treated_control <- na.omit(balanced_treated_control)
@@ -160,20 +145,26 @@ ES_clean_data <- function(long_data,
   }
 
   # All years and cohorts at once
-
-  possible_treated_control <- NULL
-  gc()
   stack_across_cohorts_balanced_treated_control <- rbindlist(stack_across_cohorts_balanced_treated_control, use.names = TRUE)
+  gc()
 
-  if(!is.na(treated_subset_var)){
+  if(!is.na(treated_subset_var) & is.na(control_subset_var)){
     stack_across_cohorts_balanced_treated_control[, valid_treated_group := max(as.integer(get(treated_subset_var)*(ref_event_time==treated_subset_event_time))), by=c(unit_var, "ref_onset_time")]
-  } else{
-    stack_across_cohorts_balanced_treated_control[, valid_treated_group := treated]
+    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[treated==0 | valid_treated_group==1]
+    gc()
   }
 
-  if(!is.na(control_subset_var)){
+  if(!is.na(control_subset_var) & is.na(treated_subset_var)){
     stack_across_cohorts_balanced_treated_control[, valid_control_group := max(as.integer(get(control_subset_var)*(ref_event_time==control_subset_event_time))), by=c(unit_var, "ref_onset_time")]
-    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1 | (treated==1 & valid_treated_group==1)]
+    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1  | treated==1 ]
+    gc()
+  }
+
+  if(!is.na(control_subset_var) & !is.na(treated_subset_var)){
+    stack_across_cohorts_balanced_treated_control[, valid_treated_group := max(as.integer(get(treated_subset_var)*(ref_event_time==treated_subset_event_time))), by=c(unit_var, "ref_onset_time")]
+    stack_across_cohorts_balanced_treated_control[, valid_control_group := max(as.integer(get(control_subset_var)*(ref_event_time==control_subset_event_time))), by=c(unit_var, "ref_onset_time")]
+    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1  | (treated==1 & valid_treated_group==1) ]
+    gc()
   }
 
   flog.info("Successfully produced a stacked dataset.")
@@ -201,7 +192,9 @@ ES_parallelize_trends <- function(long_data,
     data = input_dt[get(cal_time_var) < get(onset_time_var)]
   )
   gc()
+
   results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+  est <- NULL
   gc()
   results <- results[grep("\\:", rn)]
   results[, rn := gsub("\\:tax\\_yr", "", rn)]

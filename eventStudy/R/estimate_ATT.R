@@ -36,12 +36,6 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
     }
 
     new_cols <- setdiff(colnames(model_dt), start_cols)
-
-    # new_cols_used <- setdiff(
-    #   new_cols,
-    #   c(sprintf("ref_onset_time%s", min_onset_time))
-    # )
-
     new_cols_used <- gsub("\\-", "lead", new_cols) # "-" wreaks havoc otherwise, syntactically
     setnames(model_dt, new_cols, new_cols_used)
 
@@ -52,14 +46,11 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
       data = model_dt,
       nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
     )
-    gc()
-
-    all_added_cols <- setdiff(colnames(model_dt), start_cols)
-
-    model_dt[, (all_added_cols) := NULL]
+    model_dt <- NULL
     gc()
 
     results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+    est <- NULL
     gc()
     results[!grepl("ref\\_onset\\_time", rn), e := min_onset_time]
     results[, rn := gsub("lead", "-", rn)]
@@ -72,12 +63,7 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
     results[grepl("catt", rn), event_time := as.integer(gsub("catt", "", rn))]
     results[grepl("et", rn), rn := "event_time"]
     results[grepl("catt", rn), rn := "catt"]
-
-    setnames(results, c("e"), onset_time_var)
-    setnames(results, c("Estimate", "Cluster s.e."), c("estimate", "cluster_se"))
-
     results <- results[rn == "catt"]
-    gc()
   } else {
     # for (h in min(model_dt$ref_onset_time):max(model_dt$ref_onset_time)) {
     #   for (r in setdiff(min(model_dt[ref_onset_time == h]$ref_event_time):max(model_dt[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
@@ -94,7 +80,6 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
     }
 
     new_cols <- setdiff(colnames(model_dt), start_cols)
-
     new_cols_used <- gsub("\\-", "lead", new_cols) # "-" wreaks havoc otherwise, syntactically
     setnames(model_dt, new_cols, new_cols_used)
 
@@ -105,26 +90,20 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
       data = model_dt,
       nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
     )
-    gc()
-
-    all_added_cols <- setdiff(colnames(model_dt), start_cols)
-
-    model_dt[, (all_added_cols) := NULL]
+    model_dt <- NULL
     gc()
 
     results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+    est <- NULL
     gc()
-
     results <- results[grep("att", rn)]
     results[grep("lead", rn), rn := gsub("lead", "-", rn)]
     results[, e := "Pooled"]
     results[, event_time := as.integer(gsub("att", "", rn))]
     results[, rn := "att"]
-
-    setnames(results, c("e"), onset_time_var)
-    setnames(results, c("Estimate", "Cluster s.e."), c("estimate", "cluster_se"))
   }
-
+  setnames(results, c("e"), onset_time_var)
+  setnames(results, c("Estimate", "Cluster s.e."), c("estimate", "cluster_se"))
   setnames(results,"Pr(>|t|)","pval")
   results[, pval := round(pval,8)]
 
@@ -139,12 +118,20 @@ ES_estimate_std_did <- function(long_data,
                                 onset_time_var,
                                 cohort_specific_trends = FALSE,
                                 omitted_event_time = -2,
-                                cluster_vars = NULL) {
+                                cluster_vars = NULL,
+                                std_subset_var = NULL,
+                                std_subset_event_time = -1) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
 
   model_dt <- copy(long_data)
+  if(!is.null(std_subset_var)){
+    model_dt[, subset := max(as.integer(get(std_subset_var)*(event_time==std_subset_event_time))), by=c(unit_var)]
+    model_dt <- model_dt[subset == 1]
+    model_dt[, subset := NULL]
+    gc()
+  }
   start_cols <- copy(colnames(model_dt))
 
   # make event-time dummies by hand to supply them to main felm formula and extract coefficients by name
@@ -190,22 +177,19 @@ ES_estimate_std_did <- function(long_data,
                 data = model_dt,
       nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
     )
+    model_dt <- NULL
     gc()
   } else {
     est <- felm(as.formula(sprintf("%s ~ %s | %s | 0 | %s", outcomevar, event_time_form, fe_form, cluster_on_this)),
                 data = model_dt,
       nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
     )
+    model_dt <- NULL
     gc()
   }
 
-
-  all_added_cols <- setdiff(colnames(model_dt), start_cols)
-
-  model_dt[, (all_added_cols) := NULL]
-  gc()
-
   results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+  est <- NULL
   gc()
 
   results[grep("lead", rn), rn := gsub("lead", "-", rn)]
