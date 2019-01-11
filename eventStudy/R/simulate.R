@@ -13,7 +13,8 @@ ES_simulate_data <- function(units = 1e4,
                              anticipation = FALSE,
                              cohort_specific_anticipation = FALSE,
                              treated_subset = FALSE,
-                             control_subset = FALSE) {
+                             control_subset = FALSE,
+                             time_vary_confounds = FALSE) {
 
   Units <- 1:units
   Times <- min_cal_time:max_cal_time
@@ -170,8 +171,42 @@ ES_simulate_data <- function(units = 1e4,
     sim_data[, delta_t := subset_delta_t]
     sim_data[, c("pr_subset", "subset_index", "subset_delta_t") := NULL]
     gc()
+  }
 
-    print(tax_yr_fes_subset)
+  if(time_vary_confounds==TRUE){
+
+    # Different calendar time trends by binary subset_var (i.e., conditional parallel trends)
+    # Furthermore, will skew subset_var towards 1 earlier in the sample
+    # Finally, induce time variation by randomly switching some 0s to 1s
+
+    cohort_specific_subset_propensity <- data.table(
+      win_yr = sort(unique(sim_data$win_yr)),
+      pr_subset = (7:2 + 0.5)/10
+    )
+
+    sim_data <- merge(sim_data, cohort_specific_subset_propensity, by = "win_yr")
+    gc()
+
+    sim_data[, index := runif(1, min = 0, max = 1), list(tin)]
+    sim_data[, time_vary_var := as.integer(index <= pr_subset)]
+
+    # Select random members of the time_vary_var == 0 group and change their time_vary_var to 1 post 2002
+    sim_data[time_vary_var == 0 & tax_yr > 2002, time_vary_var := as.integer(runif(1) > 0.5), by = list(tin)]
+
+    tax_yr_fes_subset0 <- data.table(tax_yr = sort(unique(sim_data$tax_yr)),
+                                     subset_delta_t = sort(runif(uniqueN(sim_data$tax_yr), min = 0.10, max = 0.20)),
+                                     time_vary_var = 0)
+    tax_yr_fes_subset1 <- data.table(tax_yr = sort(unique(sim_data$tax_yr)),
+                                     subset_delta_t = sort(runif(uniqueN(sim_data$tax_yr), min = -0.20, max = -0.10), decreasing = TRUE),
+                                     time_vary_var = 1)
+
+    tax_yr_fes_subset <- rbindlist(list(tax_yr_fes_subset0, tax_yr_fes_subset1), use.names = TRUE)
+    sim_data <- merge(sim_data, tax_yr_fes_subset, by = c("tax_yr", "time_vary_var"))
+    gc()
+
+    sim_data[, delta_t := subset_delta_t]
+    sim_data[, c("pr_subset", "index", "subset_delta_t") := NULL]
+    gc()
   }
 
   setorderv(sim_data, c("tin", "tax_yr"))
@@ -216,7 +251,9 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                              correct_for_treated_subset = FALSE,
                                              control_subset = FALSE,
                                              control_subset_event_time = -1,
-                                             correct_for_control_subset = FALSE) {
+                                             correct_for_control_subset = FALSE,
+                                             time_vary_confounds = FALSE,
+                                             correct_time_vary_confounds = FALSE) {
   set.seed(seed)
 
   sim_result <- ES_simulate_data(units,
@@ -226,11 +263,19 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                  homogeneous_ATT = homogeneous_ATT,
                                  cohort_specific_anticipation = cohort_specific_anticipation,
                                  treated_subset = treated_subset,
-                                 control_subset = control_subset)
+                                 control_subset = control_subset,
+                                 time_vary_confounds = time_vary_confounds)
 
   if (correct_pre_trends == TRUE) {
-    long_data <- ES_parallelize_trends(long_data = sim_result[[1]],outcomevar = "outcome",cal_time_var = "tax_yr",onset_time_var = "win_yr"
+    long_data <- ES_parallelize_trends(long_data = sim_result[[1]],outcomevar = "outcome",unit_var="tin",cal_time_var = "tax_yr",onset_time_var = "win_yr"
     )
+  } else if(correct_time_vary_confounds == TRUE){
+    long_data <- ES_residualize_time_varying_covar(long_data = sim_result[[1]],
+                                                   outcomevar = "outcome",
+                                                   unit_var="tin",
+                                                   cal_time_var = "tax_yr",
+                                                   onset_time_var = "win_yr",
+                                                   time_vary_covar = "time_vary_var")
   } else {
     long_data <- sim_result[[1]]
   }
@@ -339,8 +384,10 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
       onset_time_var = "win_yr",
       cohort_specific_trends = correct_pre_trends,
       omitted_event_time = omitted_event_time,
+      cluster_vars = NULL,
       std_subset_var = "subset_var",
-      std_subset_event_time = -1
+      std_subset_event_time = -1,
+      time_vary_confounds = time_vary_confounds
     )
   } else{
     es_results <- ES_estimate_std_did(
@@ -350,7 +397,10 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
       cal_time_var = "tax_yr",
       onset_time_var = "win_yr",
       cohort_specific_trends = correct_pre_trends,
-      omitted_event_time = omitted_event_time
+      omitted_event_time = omitted_event_time,
+      cluster_vars = NULL,
+      time_vary_confounds = time_vary_confounds,
+      time_vary_covar = "time_vary_var"
     )
   }
 

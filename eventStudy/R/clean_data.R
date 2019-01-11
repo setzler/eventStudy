@@ -173,6 +173,7 @@ ES_clean_data <- function(long_data,
 
 ES_parallelize_trends <- function(long_data,
                                   outcomevar,
+                                  unit_var,
                                   cal_time_var,
                                   onset_time_var) {
 
@@ -210,5 +211,49 @@ ES_parallelize_trends <- function(long_data,
   input_dt[, (all_added_cols) := NULL]
   gc()
 
+  setorderv(input_dt, c(unit_var, cal_time_var))
+  return(input_dt)
+}
+
+ES_residualize_time_varying_covar <- function(long_data,
+                                              outcomevar,
+                                              unit_var,
+                                              cal_time_var,
+                                              onset_time_var,
+                                              time_vary_covar) {
+
+  # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
+  # Can revisit this to remove the copy for memory efficiency at a later point.
+
+  input_dt = copy(long_data)
+
+  cal_times <- input_dt[, sort(unique(get(cal_time_var)))]
+  min_cal_time <- min(cal_times)
+
+  start_cols <- copy(colnames(input_dt))
+
+  est <- felm(as.formula(paste0(eval(outcomevar), " ~ -1 + ", sprintf("factor(%s)", time_vary_covar), " | 0 | 0 | 0")),
+              data = input_dt[get(cal_time_var) < get(onset_time_var)],
+              nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+  )
+  gc()
+
+  results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+  est <- NULL
+  gc()
+  results[, rn := gsub("\\_", "", rn)]
+  results[, rn := gsub(sprintf("factor\\(%s\\)", gsub("\\_", "", time_vary_covar)), "", rn)]
+  results[, rn := as.integer(rn)]
+  results <- results[, list(rn, Estimate)]
+  setnames(results, c("rn", "Estimate"), c(time_vary_covar, "pre_intercept"))
+
+  input_dt <- merge(input_dt, results, by = time_vary_covar, all.x = TRUE)
+  input_dt[!is.na(pre_intercept), (outcomevar) := get(outcomevar) - pre_intercept]
+
+  all_added_cols <- setdiff(colnames(input_dt), start_cols)
+  input_dt[, (all_added_cols) := NULL]
+  gc()
+
+  setorderv(input_dt, c(unit_var, cal_time_var))
   return(input_dt)
 }

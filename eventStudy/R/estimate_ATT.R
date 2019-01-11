@@ -120,7 +120,9 @@ ES_estimate_std_did <- function(long_data,
                                 omitted_event_time = -2,
                                 cluster_vars = NULL,
                                 std_subset_var = NULL,
-                                std_subset_event_time = -1) {
+                                std_subset_event_time = -1,
+                                time_vary_confounds = FALSE,
+                                time_vary_covar) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
@@ -179,6 +181,27 @@ ES_estimate_std_did <- function(long_data,
     )
     model_dt <- NULL
     gc()
+  } else if(time_vary_confounds == TRUE){
+
+    # # Further omit min event_time + 1
+    # addl_event_time_to_omit <- abs(min(model_dt$event_time) + 1)
+    # event_time_form <- gsub(sprintf("event_timelead%s\\+", addl_event_time_to_omit), "", event_time_form)
+
+    # Add age to fe_form
+    # fe_form <- paste(c(unit_var, cal_time_var), collapse = "+")
+    fe_form <- paste(c(unit_var, cal_time_var, time_vary_covar), collapse = "+")
+
+    # est <- felm(as.formula(sprintf("%s ~ %s + factor(time_vary_var) | %s | 0 | %s", outcomevar, event_time_form, fe_form, cluster_on_this)),
+    #             data = model_dt,
+    #             nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+    # )
+    est <- felm(as.formula(sprintf("%s ~ %s | %s | 0 | %s", outcomevar, event_time_form, fe_form, cluster_on_this)),
+                data = model_dt,
+                nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+    )
+    model_dt <- NULL
+    gc()
+
   } else {
     est <- felm(as.formula(sprintf("%s ~ %s | %s | 0 | %s", outcomevar, event_time_form, fe_form, cluster_on_this)),
                 data = model_dt,
