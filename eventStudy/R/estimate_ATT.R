@@ -6,7 +6,7 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
   # Just in case, we immediately make a copy of the input ES_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
 
-  model_dt = copy(ES_data)
+  model_dt <- copy(ES_data)
 
   onset_times <- sort(unique(model_dt[, .N, by = eval(onset_time_var)][[onset_time_var]]))
   min_onset_time <- min(onset_times)
@@ -19,17 +19,9 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
   start_cols <- copy(colnames(model_dt))
 
   if (homogeneous_ATT == FALSE) {
-    # for (h in min(model_dt$ref_onset_time):max(model_dt$ref_onset_time)) {
-    #   var <- sprintf("ref_onset_time%s", h)
-    #   model_dt[, (var) := as.integer(ref_onset_time == h)]
-    #   var <- sprintf("ref_onset_time%s_treated", h)
-    #   model_dt[, (var) := as.integer(ref_onset_time == h & get(onset_time_var) == h)]
-    # }
 
     for (h in min(model_dt$ref_onset_time):max(model_dt$ref_onset_time)) {
       for (r in setdiff(min(model_dt[ref_onset_time == h]$ref_event_time):max(model_dt[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
-        # var <- sprintf("ref_onset_time%s_et%s", h, r)
-        # model_dt[, (var) := as.integer(ref_onset_time == h & ref_event_time == r)]
         var <- sprintf("ref_onset_time%s_catt%s", h, r)
         model_dt[, (var) := as.integer(ref_onset_time == h & ref_event_time == r & get(onset_time_var) == h)]
       }
@@ -65,16 +57,8 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
     results[grepl("catt", rn), rn := "catt"]
     results <- results[rn == "catt"]
   } else {
-    # for (h in min(model_dt$ref_onset_time):max(model_dt$ref_onset_time)) {
-    #   for (r in setdiff(min(model_dt[ref_onset_time == h]$ref_event_time):max(model_dt[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
-    #     var <- sprintf("ref_onset_time%s_et%s", h, r)
-    #     model_dt[, (var) := as.integer(ref_onset_time == h & ref_event_time == r)]
-    #   }
-    # }
 
     for (r in setdiff(min(model_dt$ref_event_time):max(model_dt$ref_event_time), omitted_event_time)) {
-      # var = sprintf("et%s", r)
-      # model_dt[, (var) := as.integer(ref_event_time == r)]
       var <- sprintf("att%s", r)
       model_dt[, (var) := as.integer(ref_event_time == r & ref_onset_time == get(onset_time_var))]
     }
@@ -116,24 +100,26 @@ ES_estimate_std_did <- function(long_data,
                                 unit_var,
                                 cal_time_var,
                                 onset_time_var,
-                                cohort_specific_trends = FALSE,
+                                correct_pre_trends = FALSE,
                                 omitted_event_time = -2,
                                 cluster_vars = NULL,
                                 std_subset_var = NULL,
                                 std_subset_event_time = -1,
-                                time_vary_confounds = FALSE,
+                                correct_time_vary_confounds = FALSE,
                                 time_vary_covar) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
 
   model_dt <- copy(long_data)
+
   if(!is.null(std_subset_var)){
     model_dt[, subset := max(as.integer(get(std_subset_var)*(event_time==std_subset_event_time))), by=c(unit_var)]
     model_dt <- model_dt[subset == 1]
     model_dt[, subset := NULL]
     gc()
   }
+
   start_cols <- copy(colnames(model_dt))
 
   # make event-time dummies by hand to supply them to main felm formula and extract coefficients by name
@@ -150,6 +136,10 @@ ES_estimate_std_did <- function(long_data,
   # Should now be able to combine all of the above in a natural way
   event_time_form <- paste(event_time_cols, collapse = "+")
   fe_form <- paste(c(unit_var, cal_time_var), collapse = "+")
+
+  if(correct_time_vary_confounds == TRUE){
+    fe_form <- paste(c(unit_var, cal_time_var, time_vary_covar), collapse = "+")
+  }
 
   if( !is.null(cluster_vars) ){
     # cluster-robust SEs
@@ -169,7 +159,7 @@ ES_estimate_std_did <- function(long_data,
     # ^^ Note: not a typo -- when not clustering, summary(felm_object, robust = TRUE) returns with name "Robust s.e" missing period after "e"
   }
 
-  if (cohort_specific_trends == TRUE) {
+  if (correct_pre_trends == TRUE) {
 
     # Further omit min event_time + 1
     addl_event_time_to_omit <- abs(min(model_dt$event_time) + 1)
@@ -181,28 +171,8 @@ ES_estimate_std_did <- function(long_data,
     )
     model_dt <- NULL
     gc()
-  } else if(time_vary_confounds == TRUE){
-
-    # # Further omit min event_time + 1
-    # addl_event_time_to_omit <- abs(min(model_dt$event_time) + 1)
-    # event_time_form <- gsub(sprintf("event_timelead%s\\+", addl_event_time_to_omit), "", event_time_form)
-
-    # Add age to fe_form
-    # fe_form <- paste(c(unit_var, cal_time_var), collapse = "+")
-    fe_form <- paste(c(unit_var, cal_time_var, time_vary_covar), collapse = "+")
-
-    # est <- felm(as.formula(sprintf("%s ~ %s + factor(time_vary_var) | %s | 0 | %s", outcomevar, event_time_form, fe_form, cluster_on_this)),
-    #             data = model_dt,
-    #             nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-    # )
-    est <- felm(as.formula(sprintf("%s ~ %s | %s | 0 | %s", outcomevar, event_time_form, fe_form, cluster_on_this)),
-                data = model_dt,
-                nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-    )
-    model_dt <- NULL
-    gc()
-
   } else {
+
     est <- felm(as.formula(sprintf("%s ~ %s | %s | 0 | %s", outcomevar, event_time_form, fe_form, cluster_on_this)),
                 data = model_dt,
       nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
@@ -222,7 +192,6 @@ ES_estimate_std_did <- function(long_data,
 
   setnames(results, c("Estimate", results_se_col_name), c("estimate", "cluster_se"))
   setnames(results, c("e"), onset_time_var)
-
   setnames(results,"Pr(>|t|)","pval")
   results[, pval := round(pval,8)]
 

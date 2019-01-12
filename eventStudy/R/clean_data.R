@@ -16,12 +16,12 @@ ES_clean_data <- function(long_data,
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
 
-  input_dt = copy(long_data)
+  input_dt <- copy(long_data)
 
   # Restriction based on supplied omitted_event_time
 
-  min_eligible_cohort = min(input_dt[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])
-  input_dt = input_dt[get(onset_time_var) >= min_eligible_cohort]
+  min_eligible_cohort <- min(input_dt[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])
+  input_dt <- input_dt[get(onset_time_var) >= min_eligible_cohort]
   gc()
 
   # Setting up
@@ -70,7 +70,8 @@ ES_clean_data <- function(long_data,
 
     possible_treated_control[[2]] <- input_dt[between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
                                               na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
-                                              with = FALSE]
+                                              with = FALSE
+                                              ]
     gc()
     possible_treated_control[[2]][, ref_onset_time := e]
     possible_treated_control[[2]][, treated := 0]
@@ -93,7 +94,7 @@ ES_clean_data <- function(long_data,
     # gc()
 
     # Key step -- making sure to only use control groups pre-treatment and treated groups where there are control observations
-    max_control_cohort = max(possible_treated_control[[onset_time_var]])
+    max_control_cohort <- max(possible_treated_control[[onset_time_var]])
     possible_treated_control <- possible_treated_control[treated == 1 & get(cal_time_var) < max_control_cohort - (min_control_gap - 1) | treated == 0 & get(cal_time_var) < get(onset_time_var)- (min_control_gap - 1)]
     gc()
 
@@ -180,7 +181,7 @@ ES_parallelize_trends <- function(long_data,
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
 
-  input_dt = copy(long_data)
+  input_dt <- copy(long_data)
 
   cal_times <- input_dt[, sort(unique(get(cal_time_var)))]
   min_cal_time <- min(cal_times)
@@ -190,16 +191,17 @@ ES_parallelize_trends <- function(long_data,
   lm_formula_input <- paste(c(sprintf("factor(%s)", cal_time_var), sprintf("factor(%s)*%s", onset_time_var, cal_time_var)), collapse = "+")
 
   est <- lm(as.formula(paste0(eval(outcomevar), " ~ ", lm_formula_input)),
-    data = input_dt[get(cal_time_var) < get(onset_time_var)]
-  )
+            data = input_dt[get(cal_time_var) < get(onset_time_var)]
+            )
   gc()
 
   results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
   est <- NULL
   gc()
   results <- results[grep("\\:", rn)]
-  results[, rn := gsub("\\:tax\\_yr", "", rn)]
-  results[, rn := gsub("factor\\(win\\_yr\\)", "", rn)]
+  results[, rn := gsub("\\_", "", rn)]
+  results[, rn := gsub(sprintf("\\:%s", gsub("\\_", "", cal_time_var)), "", rn)]
+  results[, rn := gsub(sprintf("factor\\(%s\\)", gsub("\\_", "", onset_time_var)), "", rn)]
   results[, rn := as.integer(rn)]
   results <- results[, list(rn, Estimate)]
   setnames(results, c("rn", "Estimate"), c(onset_time_var, "pre_slope"))
@@ -225,7 +227,7 @@ ES_residualize_time_varying_covar <- function(long_data,
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
 
-  input_dt = copy(long_data)
+  input_dt <- copy(long_data)
 
   cal_times <- input_dt[, sort(unique(get(cal_time_var)))]
   min_cal_time <- min(cal_times)
@@ -235,10 +237,14 @@ ES_residualize_time_varying_covar <- function(long_data,
   est <- felm(as.formula(paste0(eval(outcomevar), " ~ -1 + ", sprintf("factor(%s)", time_vary_covar), " | 0 | 0 | 0")),
               data = input_dt[get(cal_time_var) < get(onset_time_var)],
               nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-  )
+              )
   gc()
 
   results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+
+  # print("Residualization results")
+  # print(results)
+
   est <- NULL
   gc()
   results[, rn := gsub("\\_", "", rn)]
@@ -247,8 +253,9 @@ ES_residualize_time_varying_covar <- function(long_data,
   results <- results[, list(rn, Estimate)]
   setnames(results, c("rn", "Estimate"), c(time_vary_covar, "pre_intercept"))
 
-  input_dt <- merge(input_dt, results, by = time_vary_covar, all.x = TRUE)
-  input_dt[!is.na(pre_intercept), (outcomevar) := get(outcomevar) - pre_intercept]
+  input_dt <- merge(input_dt, results, by = time_vary_covar)
+  input_dt[, (outcomevar) := get(outcomevar) - pre_intercept]
+  # ^ Note: merge() above will restrict the data to only values of time_vary_covar found in the pre period
 
   all_added_cols <- setdiff(colnames(input_dt), start_cols)
   input_dt[, (all_added_cols) := NULL]

@@ -175,37 +175,15 @@ ES_simulate_data <- function(units = 1e4,
 
   if(time_vary_confounds==TRUE){
 
-    # Different calendar time trends by binary subset_var (i.e., conditional parallel trends)
-    # Furthermore, will skew subset_var towards 1 earlier in the sample
-    # Finally, induce time variation by randomly switching some 0s to 1s
+    # Age composition the same across cohorts on average
+    sim_data[, time_vary_var := as.integer(runif(1) <= 0.5), list(tin)]
 
-    cohort_specific_subset_propensity <- data.table(
-      win_yr = sort(unique(sim_data$win_yr)),
-      pr_subset = (7:2 + 0.5)/10
-    )
+    # Among the young, allow for aging coinciding with treatment
+    sim_data[time_vary_var == 0 & tax_yr >= win_yr, time_vary_var := as.integer(runif(1) <= 0.5), list(tin)]
 
-    sim_data <- merge(sim_data, cohort_specific_subset_propensity, by = "win_yr")
-    gc()
-
-    sim_data[, index := runif(1, min = 0, max = 1), list(tin)]
-    sim_data[, time_vary_var := as.integer(index <= pr_subset)]
-
-    # Select random members of the time_vary_var == 0 group and change their time_vary_var to 1 post 2002
-    sim_data[time_vary_var == 0 & tax_yr > 2002, time_vary_var := as.integer(runif(1) > 0.5), by = list(tin)]
-
-    tax_yr_fes_subset0 <- data.table(tax_yr = sort(unique(sim_data$tax_yr)),
-                                     subset_delta_t = sort(runif(uniqueN(sim_data$tax_yr), min = 0.10, max = 0.20)),
-                                     time_vary_var = 0)
-    tax_yr_fes_subset1 <- data.table(tax_yr = sort(unique(sim_data$tax_yr)),
-                                     subset_delta_t = sort(runif(uniqueN(sim_data$tax_yr), min = -0.20, max = -0.10), decreasing = TRUE),
-                                     time_vary_var = 1)
-
-    tax_yr_fes_subset <- rbindlist(list(tax_yr_fes_subset0, tax_yr_fes_subset1), use.names = TRUE)
-    sim_data <- merge(sim_data, tax_yr_fes_subset, by = c("tax_yr", "time_vary_var"))
-    gc()
-
-    sim_data[, delta_t := subset_delta_t]
-    sim_data[, c("pr_subset", "index", "subset_delta_t") := NULL]
+    # Add age change effects
+    age_change = -0.20
+    sim_data[time_vary_var == 1, delta_t := delta_t + age_change]
     gc()
   }
 
@@ -266,18 +244,59 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                  control_subset = control_subset,
                                  time_vary_confounds = time_vary_confounds)
 
+  long_dt <- copy(sim_result[[1]])
+
   if (correct_pre_trends == TRUE) {
-    long_data <- ES_parallelize_trends(long_data = sim_result[[1]],outcomevar = "outcome",unit_var="tin",cal_time_var = "tax_yr",onset_time_var = "win_yr"
+    long_dt <- ES_parallelize_trends(long_data = sim_result[[1]],outcomevar = "outcome",unit_var="tin",cal_time_var = "tax_yr",onset_time_var = "win_yr"
     )
-  } else if(correct_time_vary_confounds == TRUE){
-    long_data <- ES_residualize_time_varying_covar(long_data = sim_result[[1]],
+  }
+
+  # if(time_vary_confounds == TRUE){
+  #
+  #   print("Check to make sure that time_vary_confounds made age composition differences")
+  #
+  #   dd = copy(long_dt)
+  #   dd = dd[tax_yr < win_yr, list(outcome = mean(outcome)), list(time_vary_var,tax_yr)]
+  #
+  #   dd_wide = dcast(dd, "tax_yr ~ time_vary_var", value.var = "outcome")
+  #   setnames(dd_wide, c("0", "1"), c("value0", "value1"))
+  #
+  #   print("dd_wide pre-residualization")
+  #   print(dd_wide)
+  #
+  #   dd_wide[, diff := value1 - value0]
+  #
+  #   fig1 = ggplot(aes(x=tax_yr, y=outcome, colour=factor(time_vary_var)), data = dd) + geom_line()
+  #   fig2 = ggplot(aes(x=tax_yr, y=diff), data = dd_wide) + geom_line()
+  #   print(fig1)
+  #   print(fig2)
+  #
+  # }
+
+  if(correct_time_vary_confounds == TRUE){
+
+    long_dt <- ES_residualize_time_varying_covar(long_data = sim_result[[1]],
                                                    outcomevar = "outcome",
                                                    unit_var="tin",
                                                    cal_time_var = "tax_yr",
                                                    onset_time_var = "win_yr",
                                                    time_vary_covar = "time_vary_var")
-  } else {
-    long_data <- sim_result[[1]]
+
+    # dd = copy(long_dt)
+    # dd = dd[tax_yr < win_yr, list(outcome = mean(outcome)), list(time_vary_var,tax_yr)]
+    #
+    # dd_wide = dcast(dd, "tax_yr ~ time_vary_var", value.var = "outcome")
+    # setnames(dd_wide, c("tax_yr", "value0", "value1"))
+    #
+    # print("dd_wide post-residualization")
+    # print(dd_wide)
+    #
+    # dd_wide[, diff := value1 - value0]
+    #
+    # fig1 = ggplot(aes(x=tax_yr, y=outcome, colour=factor(time_vary_var)), data = dd) + geom_line()
+    # fig2 = ggplot(aes(x=tax_yr, y=diff), data = dd_wide) + geom_line()
+    # print(fig1)
+    # print(fig2)
   }
 
   params <- sim_result[[2]]
@@ -288,7 +307,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
 
   if(treated_subset==T & control_subset==F & correct_for_treated_subset==T){
     ES_data <- ES_clean_data(
-      long_data = long_data,
+      long_data = long_dt,
       outcomevar = "outcome",
       unit_var = "tin",
       cal_time_var = "tax_yr",
@@ -301,7 +320,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     )
   } else if(treated_subset==F & control_subset==T & correct_for_control_subset==T){
     ES_data <- ES_clean_data(
-      long_data = long_data,
+      long_data = long_dt,
       outcomevar = "outcome",
       unit_var = "tin",
       cal_time_var = "tax_yr",
@@ -314,7 +333,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     )
   } else if(treated_subset==T & control_subset==T & correct_for_treated_subset==T & correct_for_control_subset==T){
     ES_data <- ES_clean_data(
-      long_data = long_data,
+      long_data = long_dt,
       outcomevar = "outcome",
       unit_var = "tin",
       cal_time_var = "tax_yr",
@@ -329,7 +348,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     )
   } else{
     ES_data <- ES_clean_data(
-      long_data = long_data,
+      long_data = long_dt,
       outcomevar = "outcome",
       unit_var = "tin",
       cal_time_var = "tax_yr",
@@ -382,12 +401,13 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
       unit_var = "tin",
       cal_time_var = "tax_yr",
       onset_time_var = "win_yr",
-      cohort_specific_trends = correct_pre_trends,
+      correct_pre_trends = correct_pre_trends,
       omitted_event_time = omitted_event_time,
       cluster_vars = NULL,
       std_subset_var = "subset_var",
       std_subset_event_time = -1,
-      time_vary_confounds = time_vary_confounds
+      correct_time_vary_confounds = correct_time_vary_confounds,
+      time_vary_covar = "time_vary_var"
     )
   } else{
     es_results <- ES_estimate_std_did(
@@ -396,10 +416,10 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
       unit_var = "tin",
       cal_time_var = "tax_yr",
       onset_time_var = "win_yr",
-      cohort_specific_trends = correct_pre_trends,
+      correct_pre_trends = correct_pre_trends,
       omitted_event_time = omitted_event_time,
       cluster_vars = NULL,
-      time_vary_confounds = time_vary_confounds,
+      correct_time_vary_confounds = correct_time_vary_confounds,
       time_vary_covar = "time_vary_var"
     )
   }

@@ -2853,6 +2853,176 @@ Figure 6
  correction for homogeneous anticipation.
 \end_layout
 
+\begin_layout Subsubsection
+\begin_inset Formula $L$
+\end_inset
+
+ Treatment Cohorts and 
+\begin_inset Formula $M$
+\end_inset
+
+ Control Cohorts: Parallel Trends Holds, but there is Time-Varying Confounding
+\end_layout
+
+\begin_layout Standard
+[TO -DO: General explanation].
+\end_layout
+
+\begin_layout Standard
+In 
+\series bold
+\bar under
+Figure 
+\series default
+\bar default
+7, we introduce a binary time-varying covariate that is correlated with
+ the outcome.
+ Figure 7(a) demonstrates the bias in the estimators when not accounting
+ for the fact that part of each post-treatment effect is due to contemporaneous
+ change in composition through the time-varying covariate .
+ In Figure 7(b), we correct for this bias using the two-step approach where
+ we estimate factor loadings for each level of the the time-varying covariate
+ on pre-treatment data and then extrapolate these estimated factor loadings
+ on post-treatment time periods in order to residualize out their contribution
+ to the change in the outcome.
+ In the Standard DiD estimator, we include fixed effects for each level
+ of the time-varying covariate in the regression.
+ We see that the corrections generally perform well
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement t
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename /Users/BD/Documents/GitHub/eventStudy/eventStudy/inst/figures/event_time_all_seed1_size10000_aging.png
+	lyxscale 10
+	scale 10
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Time-Varying Confounding, No Correction
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename /Users/BD/Documents/GitHub/eventStudy/eventStudy/inst/figures/event_time_all_seed1_size10000_aging_corrected.png
+	lyxscale 10
+	scale 10
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Time-Varying Confounding, Corrected
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Stacked Regression with a Time-Varying Confound in Example 1
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+vspace{.1cm}
+\end_layout
+
+\begin_layout Plain Layout
+
+
+\backslash
+footnotesize
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\emph on
+Notes:
+\emph default
+ [TO DO - Explain what is unique to this figure].
+ Each point estimate uses the maximum possible treatment and control observation
+s.
+ Results are presented without imposing homogeneity (each treatment cohort
+ has its own estimate) and imposing homogeneity (
+\begin_inset Quotes eld
+\end_inset
+
+Pooled
+\begin_inset Quotes erd
+\end_inset
+
+).
+ Finally, the standard DiD regression is presented which does not stack
+ data.
+ The true value is provided for comparison.
+ Note that the true model has homogeneous ATT effects across cohorts.
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
 \begin_layout Section
 Code
 \end_layout

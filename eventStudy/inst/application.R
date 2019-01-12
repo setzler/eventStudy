@@ -136,32 +136,34 @@ subset_figs <- function(){
 age_figs <- function(){
 
   u = 1e4
-  s = 1
 
-  results_aging_no_correction = ES_simulate_estimator_comparison(units = u,
-                                                       seed = s,
-                                                       homogeneous_ATT = TRUE,
-                                                       time_vary_confounds = TRUE,
-                                                       correct_time_vary_confounds = FALSE
-                                                       )
-  fig = results_aging_no_correction[[1]]
-  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_aging.png", s, u), width = 12, height = 5)
-  sample_aging_no_correction = results_aging_no_correction[[2]]
-  sample_aging_no_correction[, corrected := 0]
+  for(s in c(1,2)){
+    results_aging_no_correction = ES_simulate_estimator_comparison(units = u,
+                                                         seed = s,
+                                                         homogeneous_ATT = TRUE,
+                                                         time_vary_confounds = TRUE,
+                                                         correct_time_vary_confounds = FALSE
+                                                         )
+    fig = results_aging_no_correction[[1]]
+    ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_aging.png", s, u), width = 12, height = 5)
+    # sample_aging_no_correction = results_aging_no_correction[[2]]
+    # sample_aging_no_correction[, corrected := 0]
 
-  results_aging_corrected = ES_simulate_estimator_comparison(units = u,
-                                                                 seed = s,
-                                                                 homogeneous_ATT = TRUE,
-                                                                 time_vary_confounds = TRUE,
-                                                                 correct_time_vary_confounds = TRUE
-                                                             )
-  fig = results_aging_corrected[[1]]
-  ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_aging_corrected.png", s, u), width = 12, height = 5)
-  sample_aging_corrected = results_aging_corrected[[2]]
-  sample_aging_corrected[, corrected := 1]
+    results_aging_corrected = ES_simulate_estimator_comparison(units = u,
+                                                                   seed = s,
+                                                                   homogeneous_ATT = TRUE,
+                                                                   time_vary_confounds = TRUE,
+                                                                   correct_time_vary_confounds = TRUE
+                                                               )
+    fig = results_aging_corrected[[1]]
+    ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_aging_corrected.png", s, u), width = 12, height = 5)
+    # sample_aging_corrected = results_aging_corrected[[2]]
+    # sample_aging_corrected[, corrected := 2]
 
-  results = rbindlist(list(sample_aging_no_correction, sample_aging_corrected), use.names = TRUE)
-  return(results)
+    # results = rbindlist(list(sample_aging_no_correction, sample_aging_corrected_manual, sample_aging_corrected), use.names = TRUE)
+    # results = rbindlist(list(sample_aging_no_correction, sample_aging_corrected), use.names = TRUE)
+    # return(results)
+  }
 }
 
 
