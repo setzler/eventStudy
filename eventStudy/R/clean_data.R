@@ -18,22 +18,6 @@ ES_clean_data <- function(long_data,
                           ipw_covars_cont = NA,
                           ipw_composition_change = FALSE) {
 
-  # long_data = long_dt
-  # outcomevar = "outcome"
-  # unit_var = "tin"
-  # cal_time_var = "tax_yr"
-  # onset_time_var = "win_yr"
-  # min_control_gap = 1
-  # max_control_gap = Inf
-  # omitted_event_time = -2
-  # treated_subset_var=NA
-  # control_subset_var=NA
-  # ipw = TRUE
-  # ipw_model = "linear"
-  # ipw_covars_discrete = "time_vary_var_bin"
-  # ipw_covars_cont = NA
-  # ipw_composition_change = TRUE # may be able to drop this option entirely if results identical for FALSE/TRUE when there is no composition change
-
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
 
