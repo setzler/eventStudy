@@ -14,7 +14,9 @@ ES_simulate_data <- function(units = 1e4,
                              cohort_specific_anticipation = FALSE,
                              treated_subset = FALSE,
                              control_subset = FALSE,
-                             time_vary_confounds = FALSE) {
+                             time_vary_confounds_low_dim = FALSE,
+                             time_vary_confounds_high_dim = FALSE,
+                             time_vary_confounds_cont = FALSE) {
 
   Units <- 1:units
   Times <- min_cal_time:max_cal_time
@@ -60,12 +62,10 @@ ES_simulate_data <- function(units = 1e4,
     # will do a quadratic in event_time post-treatment with cohort-specific loadings
     cohort_specific_post_linear <- data.table(
       win_yr = sort(unique(sim_data$win_yr)),
-      # linear_load = c(-0.01788569, -0.01061920, -0.01784453, -0.01432203, -0.01355335, -0.02377261)
       linear_load = (-2:3 - 3.5) / 100
     )
     cohort_specific_post_quad <- data.table(
       win_yr = sort(unique(sim_data$win_yr)),
-      # quad_load = c(-0.0002752961, -0.0001757367, -0.0002231508, -0.0001444998, -0.0002591208, -0.0001080127)
       quad_load = (-2:3 - 3.5) / 10000
     )
 
@@ -93,7 +93,7 @@ ES_simulate_data <- function(units = 1e4,
 
   if (cohort_specific_trends == TRUE) {
 
-    # Different calendar time trends by cohort
+    # Different linear calendar time trends by cohort
     cohort_specific_cal_time_trend <- data.table(
       win_yr = sort(unique(sim_data$win_yr)),
       cal_linear_trend = (1:6 - 3.5) / 100
@@ -106,12 +106,10 @@ ES_simulate_data <- function(units = 1e4,
   if (post_treat_dynamics == FALSE & homogeneous_ATT == TRUE) {
     linear_load <- 0
     quad_load <- 0
-
     params[names(params) %in% c("linear_load", "quad_load")] <- 0
   } else if (post_treat_dynamics == FALSE & homogeneous_ATT == FALSE) {
     sim_data[, linear_load := 0]
     sim_data[, quad_load := 0]
-
     params[, linear_load := 0]
     params[, quad_load := 0]
   }
@@ -121,10 +119,9 @@ ES_simulate_data <- function(units = 1e4,
     params <- c(params,antic_params[1],antic_params[2])
   } else if(homogeneous_ATT == T & anticipation == T & cohort_specific_anticipation == T){
 
-    # Different two-period anticipations effects by cohort
+    # Different two-period anticipation effects by cohort
     cohort_specific_antic_params <- data.table(
       win_yr = sort(unique(sim_data$win_yr)),
-      # te_0 = c(-0.2431251, -0.2135971, -0.2690795, -0.2816714, -0.2741780, -0.2002287)
       antic_1 = (-3:2) / 10,
       antic_2 = (-3:2) / 10
     )
@@ -173,18 +170,72 @@ ES_simulate_data <- function(units = 1e4,
     gc()
   }
 
-  if(time_vary_confounds==TRUE){
+  if(time_vary_confounds_low_dim==TRUE){
 
-    # Age composition the same across cohorts on average
-    sim_data[, time_vary_var := as.integer(runif(1) <= 0.5), list(tin)]
+    # Aging -- young (0) and old (1)
 
-    # Among the young, allow for aging coinciding with treatment
-    sim_data[time_vary_var == 0 & tax_yr >= win_yr, time_vary_var := as.integer(runif(1) <= 0.5), list(tin)]
+    # Earlier cohorts start older on average
+    sim_data[win_yr == 2001, time_vary_var := as.integer(runif(1) <= 0.45), list(tin)]
+    sim_data[win_yr == 2002, time_vary_var := as.integer(runif(1) <= 0.40), list(tin)]
+    sim_data[win_yr == 2003, time_vary_var := as.integer(runif(1) <= 0.35), list(tin)]
+    sim_data[win_yr == 2004, time_vary_var := as.integer(runif(1) <= 0.30), list(tin)]
+    sim_data[win_yr == 2005, time_vary_var := as.integer(runif(1) <= 0.25), list(tin)]
+    sim_data[win_yr == 2006, time_vary_var := as.integer(runif(1) <= 0.2), list(tin)]
 
-    # Add age change effects
+    # Earlier cohorts age more in the post-treatment period on average
+    sim_data[time_vary_var == 0 & tax_yr >= win_yr & win_yr == 2001, time_vary_var := as.integer(runif(1) <= 0.90), list(tin)]
+    sim_data[time_vary_var == 0 & tax_yr >= win_yr & win_yr == 2002, time_vary_var := as.integer(runif(1) <= 0.80), list(tin)]
+    sim_data[time_vary_var == 0 & tax_yr >= win_yr & win_yr == 2003, time_vary_var := as.integer(runif(1) <= 0.70), list(tin)]
+    sim_data[time_vary_var == 0 & tax_yr >= win_yr & win_yr == 2004, time_vary_var := as.integer(runif(1) <= 0.60), list(tin)]
+    sim_data[time_vary_var == 0 & tax_yr >= win_yr & win_yr == 2005, time_vary_var := as.integer(runif(1) <= 0.50), list(tin)]
+    sim_data[time_vary_var == 0 & tax_yr >= win_yr & win_yr == 2006, time_vary_var := as.integer(runif(1) <= 0.40), list(tin)]
+
+    # Add age change effect
     age_change = -0.20
     sim_data[time_vary_var == 1, delta_t := delta_t + age_change]
     gc()
+  }
+
+  if(time_vary_confounds_high_dim==TRUE){
+
+    # Age distribution at event time the same across cohorts
+    ages = 18:75
+    sim_data[, time_vary_var_at_event := sample(x = ages, 1, replace = T, prob = rep(0.1, length(ages))), list(tin)]
+    sim_data[, time_vary_var_high_dim := tax_yr - (win_yr - time_vary_var_at_event)]
+
+    # Add age change effects
+    # Let's set 36 as the reference age
+    # Will try and match the age profile seen for lottery winners
+    observed_ages = sort(unique(sim_data$time_vary_var_high_dim))
+    age_changes = data.table(time_vary_var_high_dim = sort(observed_ages))
+    age_changes[time_vary_var_high_dim < 18, age_effect := 0]
+    age_changes[between(time_vary_var_high_dim, 18, 35, incbounds = TRUE), age_effect := (time_vary_var_high_dim / 30) - .4]
+    age_changes[between(time_vary_var_high_dim, 36, 61, incbounds = TRUE), age_effect := (35 / 30) - .4]
+    age_changes[between(time_vary_var_high_dim, 61, max(observed_ages), incbounds = TRUE), age_effect := (35:17 / 30) - .4]
+    ref_level = age_changes[time_vary_var_high_dim == 36]$age_effect
+    age_changes[, age_change := age_effect - ref_level]
+    age_changes[, age_effect := NULL]
+    age_changes[time_vary_var_high_dim != 36, age_change := age_change + sample(c(-0.02, 0,  0.02), 1, replace = TRUE, prob = c(1/3, 1/3, 1/3)), list(time_vary_var_high_dim)]
+    sim_data = merge(sim_data, age_changes, by = "time_vary_var_high_dim")
+    sim_data[, delta_t := delta_t + age_change]
+
+    sim_data[between(time_vary_var_high_dim, -Inf, 10, incbounds = TRUE), time_vary_var_bin := 1]
+    sim_data[between(time_vary_var_high_dim, 11, 20, incbounds = TRUE), time_vary_var_bin := 2]
+    sim_data[between(time_vary_var_high_dim, 21, 30, incbounds = TRUE), time_vary_var_bin := 3]
+    sim_data[between(time_vary_var_high_dim, 31, 40, incbounds = TRUE), time_vary_var_bin := 4]
+    sim_data[between(time_vary_var_high_dim, 41, 50, incbounds = TRUE), time_vary_var_bin := 5]
+    sim_data[between(time_vary_var_high_dim, 51, 60, incbounds = TRUE), time_vary_var_bin := 6]
+    sim_data[between(time_vary_var_high_dim, 61, 70, incbounds = TRUE), time_vary_var_bin := 7]
+    sim_data[between(time_vary_var_high_dim, 71, 80, incbounds = TRUE), time_vary_var_bin := 8]
+    sim_data[between(time_vary_var_high_dim, 80, Inf, incbounds = TRUE), time_vary_var_bin := 9]
+
+    gc()
+  }
+
+  if(time_vary_confounds_cont==TRUE){
+
+    # STILL TO-DO -- CAN THINK ABOUT A POLYNOMIAL IN AGE
+
   }
 
   setorderv(sim_data, c("tin", "tax_yr"))
@@ -209,6 +260,10 @@ ES_simulate_data <- function(units = 1e4,
     output[[3]] <- cohort_specific_antic_params
   }
 
+  if(time_vary_confounds_high_dim==TRUE){
+    output[[4]] <- age_changes
+  }
+
 
   return(output)
 }
@@ -230,8 +285,14 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                              control_subset = FALSE,
                                              control_subset_event_time = -1,
                                              correct_for_control_subset = FALSE,
-                                             time_vary_confounds = FALSE,
-                                             correct_time_vary_confounds = FALSE) {
+                                             time_vary_confounds_low_dim = FALSE,
+                                             time_vary_confounds_high_dim = FALSE,
+                                             time_vary_confounds_cont = FALSE,
+                                             ipw_composition_change = FALSE,
+                                             correct_time_vary_confounds = FALSE,
+                                             ipw_covars_discrete = NA,
+                                             ipw_covars_cont = NA) {
+
   set.seed(seed)
 
   sim_result <- ES_simulate_data(units,
@@ -242,7 +303,9 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                  cohort_specific_anticipation = cohort_specific_anticipation,
                                  treated_subset = treated_subset,
                                  control_subset = control_subset,
-                                 time_vary_confounds = time_vary_confounds)
+                                 time_vary_confounds_low_dim = time_vary_confounds_low_dim,
+                                 time_vary_confounds_high_dim = time_vary_confounds_high_dim,
+                                 time_vary_confounds_cont = time_vary_confounds_cont)
 
   long_dt <- copy(sim_result[[1]])
 
@@ -251,29 +314,11 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     )
   }
 
-  # if(time_vary_confounds == TRUE){
-  #
-  #   print("Check to make sure that time_vary_confounds made age composition differences")
-  #
-  #   dd = copy(long_dt)
-  #   dd = dd[tax_yr < win_yr, list(outcome = mean(outcome)), list(time_vary_var,tax_yr)]
-  #
-  #   dd_wide = dcast(dd, "tax_yr ~ time_vary_var", value.var = "outcome")
-  #   setnames(dd_wide, c("0", "1"), c("value0", "value1"))
-  #
-  #   print("dd_wide pre-residualization")
-  #   print(dd_wide)
-  #
-  #   dd_wide[, diff := value1 - value0]
-  #
-  #   fig1 = ggplot(aes(x=tax_yr, y=outcome, colour=factor(time_vary_var)), data = dd) + geom_line()
-  #   fig2 = ggplot(aes(x=tax_yr, y=diff), data = dd_wide) + geom_line()
-  #   print(fig1)
-  #   print(fig2)
-  #
-  # }
+  if(time_vary_confounds_high_dim == TRUE){
+    age_changes <- sim_result[[4]]
+  }
 
-  if(correct_time_vary_confounds == TRUE){
+  if(correct_time_vary_confounds == TRUE & time_vary_confounds_low_dim == TRUE & is.na(ipw_covars_discrete) & is.na(ipw_covars_cont)){
 
     long_dt <- ES_residualize_time_varying_covar(long_data = sim_result[[1]],
                                                    outcomevar = "outcome",
@@ -282,21 +327,6 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
                                                    onset_time_var = "win_yr",
                                                    time_vary_covar = "time_vary_var")
 
-    # dd = copy(long_dt)
-    # dd = dd[tax_yr < win_yr, list(outcome = mean(outcome)), list(time_vary_var,tax_yr)]
-    #
-    # dd_wide = dcast(dd, "tax_yr ~ time_vary_var", value.var = "outcome")
-    # setnames(dd_wide, c("tax_yr", "value0", "value1"))
-    #
-    # print("dd_wide post-residualization")
-    # print(dd_wide)
-    #
-    # dd_wide[, diff := value1 - value0]
-    #
-    # fig1 = ggplot(aes(x=tax_yr, y=outcome, colour=factor(time_vary_var)), data = dd) + geom_line()
-    # fig2 = ggplot(aes(x=tax_yr, y=diff), data = dd_wide) + geom_line()
-    # print(fig1)
-    # print(fig2)
   }
 
   params <- sim_result[[2]]
@@ -346,7 +376,23 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
       control_subset_var = "subset_var",
       control_subset_event_time = control_subset_event_time
     )
-  } else{
+  } else if((time_vary_confounds_high_dim == TRUE | time_vary_confounds_cont == TRUE | !is.na(ipw_covars_discrete) | !is.na(ipw_covars_cont)) & correct_time_vary_confounds == TRUE){
+    ES_data <- ES_clean_data(
+      long_data = long_dt,
+      outcomevar = "outcome",
+      unit_var = "tin",
+      cal_time_var = "tax_yr",
+      onset_time_var = "win_yr",
+      min_control_gap = min_control_gap,
+      max_control_gap = max_control_gap,
+      omitted_event_time = omitted_event_time,
+      ipw = TRUE,
+      ipw_model = "linear",
+      ipw_covars_discrete = ipw_covars_discrete,
+      ipw_covars_cont = ipw_covars_cont,
+      ipw_composition_change = ipw_composition_change
+    )
+  } else {
     ES_data <- ES_clean_data(
       long_data = long_dt,
       outcomevar = "outcome",
@@ -376,22 +422,24 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
 
   # check how we are doing against true values
 
-  ES_results_hetero <- ES_estimate_ATT(
+  ES_results_heterog <- ES_estimate_ATT(
     ES_data = ES_data,
     outcomevar = "outcome",
     onset_time_var = "win_yr",
     cluster_vars = c("tin", "tax_yr"),
     homogeneous_ATT = FALSE,
-    omitted_event_time = omitted_event_time
+    omitted_event_time = omitted_event_time,
+    ipw = ((time_vary_confounds_high_dim == TRUE | time_vary_confounds_cont == TRUE | !is.na(ipw_covars_discrete) | !is.na(ipw_covars_cont)) & correct_time_vary_confounds == TRUE)
   )
 
-  ES_results_homo <- ES_estimate_ATT(
+  ES_results_homog <- ES_estimate_ATT(
     ES_data = ES_data,
     outcomevar = "outcome",
     onset_time_var = "win_yr",
     cluster_vars = c("tin", "tax_yr"),
     homogeneous_ATT = TRUE,
-    omitted_event_time = omitted_event_time
+    omitted_event_time = omitted_event_time,
+    ipw = ((time_vary_confounds_high_dim == TRUE | time_vary_confounds_cont == TRUE | !is.na(ipw_covars_discrete) | !is.na(ipw_covars_cont)) & correct_time_vary_confounds == TRUE)
   )
 
   if(treated_subset==T & control_subset==T & correct_for_treated_subset==T & correct_for_control_subset==T){
@@ -424,7 +472,7 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     )
   }
 
-  figdata <- rbindlist(list(ES_results_hetero, ES_results_homo, es_results), use.names = TRUE)
+  figdata <- rbindlist(list(ES_results_heterog, ES_results_homog, es_results), use.names = TRUE)
 
   if(homogeneous_ATT==T & cohort_specific_anticipation==F){
 

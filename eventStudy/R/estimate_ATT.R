@@ -1,7 +1,14 @@
 
 
 #' @export
-ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, homogeneous_ATT = TRUE, omitted_event_time = -2) {
+ES_estimate_ATT <- function(ES_data,
+                            outcomevar,
+                            onset_time_var,
+                            cluster_vars,
+                            homogeneous_ATT = TRUE,
+                            omitted_event_time = -2,
+                            ipw = FALSE
+                            ) {
 
   # Just in case, we immediately make a copy of the input ES_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
@@ -34,10 +41,34 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
     # Should now be able to combine all of the above in a natural way
     felm_formula_input <- paste(new_cols_used, collapse = "+")
 
-    est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-      data = model_dt,
-      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-    )
+    if(ipw == TRUE){
+
+      # Construct ATT weights and estimate WLS
+
+      model_dt[treated == 1, ipw := 1]
+      model_dt[treated == 0, ipw := (pr / (1 - pr))]
+
+      # Pre-processing some issues of numerical precision
+      model_dt[ipw < 0, ipw := 0]
+
+      # This would be the place to add additional assumptions
+      # E.g., restrict to propensity scores strictly between 0 and 1
+
+      model_dt = model_dt[between(pr, 0, 1, incbounds = FALSE)]
+      gc()
+
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                  data = model_dt, weights = model_dt$ipw,
+                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+      )
+
+    } else{
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                  data = model_dt,
+                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+      )
+    }
+
     model_dt <- NULL
     gc()
 
@@ -70,10 +101,34 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
     # Should now be able to combine all of the above in a natural way
     felm_formula_input <- paste(c(new_cols_used), collapse = "+")
 
-    est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-      data = model_dt,
-      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-    )
+    if(ipw == TRUE){
+
+      # Construct ATT weights and estimate WLS
+
+      model_dt[treated == 1, ipw := 1]
+      model_dt[treated == 0, ipw := (pr / (1 - pr))]
+
+      # Pre-processing some issues of numerical precision
+      model_dt[ipw < 0, ipw := 0]
+
+      # This would be the place to add additional assumptions
+      # E.g., restrict to propensity scores strictly between 0 and 1
+
+      model_dt = model_dt[between(pr, 0, 1, incbounds = FALSE)]
+      gc()
+
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                  data = model_dt, weights = model_dt$ipw,
+                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+      )
+
+    } else{
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                  data = model_dt,
+                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+      )
+    }
+
     model_dt <- NULL
     gc()
 
@@ -91,6 +146,16 @@ ES_estimate_ATT <- function(ES_data, outcomevar, onset_time_var, cluster_vars, h
   setnames(results,"Pr(>|t|)","pval")
   results[, pval := round(pval,8)]
 
+  if(homogeneous_ATT == FALSE & ipw == TRUE){
+    flog.info("Estimated heterogeneous case with WLS using IPW.")
+  } else if(homogeneous_ATT == FALSE & ipw == FALSE){
+    flog.info("Estimated heterogeneous case with OLS.")
+  } else if(homogeneous_ATT == TRUE & ipw == TRUE){
+    flog.info("Estimated homogeneous case with WLS using IPW.")
+  } else{
+    flog.info("Estimated homogeneous case with OLS.")
+  }
+
   return(results)
 }
 
@@ -105,6 +170,9 @@ ES_estimate_std_did <- function(long_data,
                                 cluster_vars = NULL,
                                 std_subset_var = NULL,
                                 std_subset_event_time = -1,
+                                time_vary_confounds_low_dim = FALSE,
+                                time_vary_confounds_high_dim = FALSE,
+                                time_vary_confounds_cont = FALSE,
                                 correct_time_vary_confounds = FALSE,
                                 time_vary_covar) {
 
@@ -137,7 +205,7 @@ ES_estimate_std_did <- function(long_data,
   event_time_form <- paste(event_time_cols, collapse = "+")
   fe_form <- paste(c(unit_var, cal_time_var), collapse = "+")
 
-  if(correct_time_vary_confounds == TRUE){
+  if(correct_time_vary_confounds == TRUE & time_vary_confounds_low_dim == TRUE){
     fe_form <- paste(c(unit_var, cal_time_var, time_vary_covar), collapse = "+")
   }
 

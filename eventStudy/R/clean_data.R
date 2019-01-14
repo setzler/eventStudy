@@ -11,7 +11,28 @@ ES_clean_data <- function(long_data,
                           treated_subset_var=NA,
                           treated_subset_event_time=NA,
                           control_subset_var=NA,
-                          control_subset_event_time=NA) {
+                          control_subset_event_time=NA,
+                          ipw = FALSE,
+                          ipw_model = "linear",
+                          ipw_covars_discrete = NA,
+                          ipw_covars_cont = NA,
+                          ipw_composition_change = FALSE) {
+
+  # long_data = long_dt
+  # outcomevar = "outcome"
+  # unit_var = "tin"
+  # cal_time_var = "tax_yr"
+  # onset_time_var = "win_yr"
+  # min_control_gap = 1
+  # max_control_gap = Inf
+  # omitted_event_time = -2
+  # treated_subset_var=NA
+  # control_subset_var=NA
+  # ipw = TRUE
+  # ipw_model = "linear"
+  # ipw_covars_discrete = "time_vary_var_bin"
+  # ipw_covars_cont = NA
+  # ipw_composition_change = TRUE # may be able to drop this option entirely if results identical for FALSE/TRUE when there is no composition change
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
@@ -54,6 +75,7 @@ ES_clean_data <- function(long_data,
   }
 
   for (e in min_onset_time:last_treat_grp_time) {
+
     j <- j + 1
 
 
@@ -61,7 +83,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control <- list()
 
     possible_treated_control[[1]] <- input_dt[get(onset_time_var) == e,
-                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont)),
                                               with = FALSE
                                               ]
     gc()
@@ -69,7 +91,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control[[1]][, treated := 1]
 
     possible_treated_control[[2]] <- input_dt[between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
-                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont)),
                                               with = FALSE
                                               ]
     gc()
@@ -126,6 +148,83 @@ ES_clean_data <- function(long_data,
       balanced_treated_control[[i]] <- na.omit(balanced_treated_control[[i]])
       gc()
       balanced_treated_control[[i]][, catt_specific_sample := i]
+
+      if(ipw == TRUE){
+
+        pr = "pr"
+
+        # Given that the control group is (potentially) changing for each ref_onset_time X ref_event_time,
+        # we will need to estimate the propensity score one CATT at a time
+
+        ipw_covars_discrete_onset_pre=NA
+        ipw_covars_discrete_onset_post=NA
+        ipw_covars_cont_onset_pre=NA
+        ipw_covars_cont_onset_post=NA
+
+        if(ipw_composition_change == TRUE){
+
+          if(!is.na(ipw_covars_discrete[1])){
+            for(var in na.omit(c(ipw_covars_discrete))){
+              varname_pre = sprintf("%s_at_onset_pre", var)
+              balanced_treated_control[[i]][, (varname_pre) := max(as.integer(get(var)*(ref_event_time==omitted_event_time))), by = unit_var]
+              ipw_covars_discrete_onset_pre = na.omit(c(ipw_covars_discrete_onset_pre, varname_pre))
+              varname_post = sprintf("%s_at_onset_post", var)
+              balanced_treated_control[[i]][, (varname_post) := max(as.integer(get(var)*(ref_event_time==t))), by = unit_var]
+              ipw_covars_discrete_onset_post = na.omit(c(ipw_covars_discrete_onset_post, varname_post))
+            }
+          }
+
+          # I'm not sure that this is quite right below
+          if(!is.na(ipw_covars_cont[1])){
+            for(var in na.omit(c(ipw_covars_cont_onset))){
+              varname_pre = sprintf("%s_at_onset_pre", var)
+              balanced_treated_control[[i]][, (varname_pre) := max(as.integer(get(var)*(ref_event_time==omitted_event_time))), by = unit_var]
+              ipw_covars_cont_onset_pre = na.omit(c(ipw_covars_cont_onset_pre, varname_pre))
+              varname_post = sprintf("%s_at_onset_post", var)
+              balanced_treated_control[[i]][, (varname_post) := max(as.integer(get(var)*(ref_event_time==t))), by = unit_var]
+              ipw_covars_cont_onset_post = na.omit(c(ipw_covars_cont_onset_post, varname_post))
+            }
+          }
+
+          formula_input_pre <- paste0(paste0("factor(", na.omit(ipw_covars_discrete_onset_pre), ")", collapse = "+"),
+                                  paste(na.omit(ipw_covars_cont_onset_pre), collapse = "+"),
+                                  collapse = "+"
+                                  )
+
+          formula_input_post <- paste0(paste0("factor(", na.omit(ipw_covars_discrete_onset_post), ")", collapse = "+"),
+                                      paste(na.omit(ipw_covars_cont_onset_post), collapse = "+"),
+                                      collapse = "+"
+                                      )
+
+          if(ipw_model == "linear"){
+            balanced_treated_control[[i]][ref_event_time == omitted_event_time, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_pre)),data = balanced_treated_control[[i]][ref_event_time == omitted_event_time]))]
+            balanced_treated_control[[i]][ref_event_time == t, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_post)),data = balanced_treated_control[[i]][ref_event_time == t]))]
+          } else if(ipw_model == "logit"){
+            balanced_treated_control[[i]][ref_event_time == omitted_event_time, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input_pre)),family = binomial(link = "logit"), data = balanced_treated_control[[i]][ref_event_time == omitted_event_time]))]
+            balanced_treated_control[[i]][ref_event_time == t, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input_post)),family = binomial(link = "logit"), data = balanced_treated_control[[i]][ref_event_time == t]))]
+          } else if(ipw_model == "probit"){
+            balanced_treated_control[[i]][ref_event_time == omitted_event_time, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_pre)),family = binomial(link = "probit"), data = balanced_treated_control[[i]][ref_event_time == omitted_event_time]))]
+            balanced_treated_control[[i]][ref_event_time == t, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_post)),family = binomial(link = "probit"), data = balanced_treated_control[[i]][ref_event_time == t]))]
+          }
+        } else {
+
+          formula_input <- paste0(paste0("factor(", na.omit(ipw_covars_discrete), ")", collapse = "+"),
+                                  paste(na.omit(ipw_covars_cont), collapse = "+"),
+                                  collapse = "+"
+          )
+
+          if(ipw_model == "linear"){
+            balanced_treated_control[[i]][, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),data = balanced_treated_control[[i]]))]
+          } else if(ipw_model == "logit"){
+            balanced_treated_control[[i]][, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input)),family = binomial(link = "logit"), data = balanced_treated_control[[i]]))]
+          } else if(ipw_model == "probit"){
+            balanced_treated_control[[i]][, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),family = binomial(link = "probit"), data = balanced_treated_control[[i]]))]
+          }
+        }
+
+
+      } else{ pr = NA } # just to make sure the next na.omit() below doesn't break
+
     }
 
     possible_treated_control <- NULL
@@ -138,7 +237,7 @@ ES_clean_data <- function(long_data,
     balanced_treated_control <- na.omit(balanced_treated_control)
     gc()
 
-    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var ,"ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
+    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont, pr, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
     gc()
 
     balanced_treated_control <- NULL
@@ -169,6 +268,13 @@ ES_clean_data <- function(long_data,
   }
 
   flog.info("Successfully produced a stacked dataset.")
+
+  if(ipw == TRUE & ipw_composition_change == TRUE){
+    flog.info("Estimated two seprate propensity score models per (ref_onset_time, CATT).")
+  } else if(ipw == TRUE & ipw_composition_change == FALSE){
+    flog.info("Estimated one propensity score model per (ref_onset_time, CATT).")
+  }
+
   return(stack_across_cohorts_balanced_treated_control)
 }
 
@@ -214,6 +320,9 @@ ES_parallelize_trends <- function(long_data,
   gc()
 
   setorderv(input_dt, c(unit_var, cal_time_var))
+
+  flog.info("Residualized out cohort-specific pre-trends using only pre-treatment data.")
+
   return(input_dt)
 }
 
@@ -241,10 +350,6 @@ ES_residualize_time_varying_covar <- function(long_data,
   gc()
 
   results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
-
-  # print("Residualization results")
-  # print(results)
-
   est <- NULL
   gc()
   results[, rn := gsub("\\_", "", rn)]
@@ -262,5 +367,8 @@ ES_residualize_time_varying_covar <- function(long_data,
   gc()
 
   setorderv(input_dt, c(unit_var, cal_time_var))
+
+  flog.info("Residualized out contribution of covariates using only pre-treatment data.")
+
   return(input_dt)
 }
