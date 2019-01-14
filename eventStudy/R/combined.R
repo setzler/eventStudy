@@ -29,6 +29,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 #' @export
 ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor = 1.96){
 
+  figdata <- figdata[rn %in% c("att","catt")]
   figdata[, ref_event_time := as.numeric(ref_event_time)]
   figdata <- figdata[ ref_event_time >= lower_event & ref_event_time <= upper_event]
   figdata[, jitter := .GRP, by = ref_onset_time]
@@ -50,6 +51,7 @@ ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor =
 #' @export
 ES_plot_levels <- function(figdata, cohort_subset = NA, lower_event = -3, upper_event = 5, omitted_event_time = -2){
 
+  figdata <- figdata[rn %in% c("treatment_means")]
   figdata[, estimate := estimate - estimate[ref_event_time == omitted_event_time], list(ref_onset_time,treated)]
   figdata[, ref_onset_time :=  as.integer(as.character(ref_onset_time))]
   figdata[, ref_event_time := as.integer(as.character(ref_event_time))]
