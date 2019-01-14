@@ -1,5 +1,6 @@
 
 
+#' @export
 ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                omitted_event_time= -2, min_control_gap=1, max_control_gap=Inf,
                control_subset_var=NA, control_subset_event_time=0){
@@ -25,6 +26,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   return(figdata)
 }
 
+#' @export
 ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor = 1.96){
 
   figdata[, ref_event_time := as.numeric(ref_event_time)]
@@ -45,6 +47,7 @@ ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor =
 
 }
 
+#' @export
 ES_plot_levels <- function(figdata, cohort_subset = NA, lower_event = -3, upper_event = 5, omitted_event_time = -2){
 
   figdata[, estimate := estimate - estimate[ref_event_time == omitted_event_time], list(ref_onset_time,treated)]
