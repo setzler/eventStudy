@@ -27,7 +27,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 }
 
 #' @export
-ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor = 1.96){
+ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor = 1.96, homogeneous_only = FALSE){
 
   figdata <- figdata[rn %in% c("att","catt")]
   figdata[, ref_event_time := as.numeric(ref_event_time)]
@@ -37,12 +37,21 @@ ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor =
   jitter_scale <- figdata[,length(unique(jitter))]
   figdata[, jitter_event_time := ref_event_time + (jitter - jitter_center) / jitter_scale]
 
-  fig <- ggplot(aes( x = jitter_event_time, y = estimate, colour = factor(ref_onset_time)), data = figdata) +
-    geom_point() + theme_bw(base_size = 16) +
-    geom_errorbar(aes(ymin = estimate - ci_factor * cluster_se, ymax = estimate + ci_factor * cluster_se)) +
-    scale_x_continuous(breaks = pretty_breaks()) +
-    labs(x = "Event Time", color = "Cohort") +
-    annotate(geom = "text", x = -2, y = 0, label = "(Omitted)", size = 4)
+  if(homogeneous_only){
+    fig <- ggplot(aes( x = ref_event_time, y = estimate), data = figdata[ref_onset_time=="Pooled"]) +
+      geom_point() + theme_bw(base_size = 16) +
+      geom_errorbar(aes(ymin = estimate - ci_factor * cluster_se, ymax = estimate + ci_factor * cluster_se)) +
+      scale_x_continuous(breaks = pretty_breaks()) +
+      labs(x = "Event Time") +
+      annotate(geom = "text", x = -2, y = 0, label = "(Omitted)", size = 4)
+  } else {
+    fig <- ggplot(aes( x = jitter_event_time, y = estimate, colour = factor(ref_onset_time)), data = figdata) +
+      geom_point() + theme_bw(base_size = 16) +
+      geom_errorbar(aes(ymin = estimate - ci_factor * cluster_se, ymax = estimate + ci_factor * cluster_se)) +
+      scale_x_continuous(breaks = pretty_breaks()) +
+      labs(x = "Event Time", color = "Cohort") +
+      annotate(geom = "text", x = -2, y = 0, label = "(Omitted)", size = 4)
+  }
 
   return(fig)
 
