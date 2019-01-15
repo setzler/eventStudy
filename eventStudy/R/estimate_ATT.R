@@ -7,7 +7,8 @@ ES_estimate_ATT <- function(ES_data,
                             cluster_vars,
                             homogeneous_ATT = TRUE,
                             omitted_event_time = -2,
-                            ipw = FALSE
+                            ipw = FALSE,
+                            ipw_composition_change = FALSE
                             ) {
 
   # Just in case, we immediately make a copy of the input ES_data and run everything on the full copy
@@ -43,13 +44,16 @@ ES_estimate_ATT <- function(ES_data,
 
     if(ipw == TRUE){
 
-      # Construct ATT weights and estimate WLS
+      if(ipw_composition_change == FALSE){
+        # Construct ATT weights and estimate WLS
+        # For ipw_composition_change == TRUE case, make them as part of ES_clean_data
 
-      model_dt[treated == 1, ipw := 1]
-      model_dt[treated == 0, ipw := (pr / (1 - pr))]
+        model_dt[treated == 1, weight := 1]
+        model_dt[treated == 0, weight := (pr / (1 - pr))]
+      }
 
       # Pre-processing some issues of numerical precision
-      model_dt[ipw < 0, ipw := 0]
+      model_dt[weight < 0, weight := 0]
 
       # This would be the place to add additional assumptions
       # E.g., restrict to propensity scores strictly between 0 and 1
@@ -58,7 +62,7 @@ ES_estimate_ATT <- function(ES_data,
       gc()
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = model_dt, weights = model_dt$ipw,
+                  data = model_dt, weights = model_dt$weight,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
 
@@ -103,13 +107,16 @@ ES_estimate_ATT <- function(ES_data,
 
     if(ipw == TRUE){
 
-      # Construct ATT weights and estimate WLS
+      if(ipw_composition_change == FALSE){
+        # Construct ATT weights and estimate WLS
+        # For ipw_composition_change == TRUE case, make them as part of ES_clean_data
 
-      model_dt[treated == 1, ipw := 1]
-      model_dt[treated == 0, ipw := (pr / (1 - pr))]
+        model_dt[treated == 1, weight := 1]
+        model_dt[treated == 0, weight := (pr / (1 - pr))]
+      }
 
       # Pre-processing some issues of numerical precision
-      model_dt[ipw < 0, ipw := 0]
+      model_dt[weight < 0, weight := 0]
 
       # This would be the place to add additional assumptions
       # E.g., restrict to propensity scores strictly between 0 and 1
@@ -118,7 +125,7 @@ ES_estimate_ATT <- function(ES_data,
       gc()
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = model_dt, weights = model_dt$ipw,
+                  data = model_dt, weights = model_dt$weight,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
 

@@ -429,7 +429,8 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     cluster_vars = c("tin", "tax_yr"),
     homogeneous_ATT = FALSE,
     omitted_event_time = omitted_event_time,
-    ipw = ((time_vary_confounds_high_dim == TRUE | time_vary_confounds_cont == TRUE | !is.na(ipw_covars_discrete) | !is.na(ipw_covars_cont)) & correct_time_vary_confounds == TRUE)
+    ipw = ((time_vary_confounds_high_dim == TRUE | time_vary_confounds_cont == TRUE | !is.na(ipw_covars_discrete) | !is.na(ipw_covars_cont)) & correct_time_vary_confounds == TRUE),
+    ipw_composition_change = ipw_composition_change
   )
 
   ES_results_homog <- ES_estimate_ATT(
@@ -439,7 +440,9 @@ ES_simulate_estimator_comparison <- function(units = 1e4,
     cluster_vars = c("tin", "tax_yr"),
     homogeneous_ATT = TRUE,
     omitted_event_time = omitted_event_time,
-    ipw = ((time_vary_confounds_high_dim == TRUE | time_vary_confounds_cont == TRUE | !is.na(ipw_covars_discrete) | !is.na(ipw_covars_cont)) & correct_time_vary_confounds == TRUE)
+    ipw = ((time_vary_confounds_high_dim == TRUE | time_vary_confounds_cont == TRUE | !is.na(ipw_covars_discrete) | !is.na(ipw_covars_cont)) & correct_time_vary_confounds == TRUE),
+    ipw_composition_change = ipw_composition_change
+
   )
 
   if(treated_subset==T & control_subset==T & correct_for_treated_subset==T & correct_for_control_subset==T){

@@ -135,7 +135,7 @@ ES_clean_data <- function(long_data,
 
       if(ipw == TRUE){
 
-        pr = "pr"
+        pr = "pr" # for the eventual na.omit()
 
         # Given that the control group is (potentially) changing for each ref_onset_time X ref_event_time,
         # we will need to estimate the propensity score one CATT at a time
@@ -190,7 +190,34 @@ ES_clean_data <- function(long_data,
             balanced_treated_control[[i]][ref_event_time == omitted_event_time, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_pre)),family = binomial(link = "probit"), data = balanced_treated_control[[i]][ref_event_time == omitted_event_time]))]
             balanced_treated_control[[i]][ref_event_time == t, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_post)),family = binomial(link = "probit"), data = balanced_treated_control[[i]][ref_event_time == t]))]
           }
-        } else {
+
+          # Will adopt a different approach in the time-varying case
+
+          # Calculate mean of covariate in the four relevant cells - treat/control and pre/post
+          # Then assign weights relative to a reference cell, separately for within-cell values of time_vary_var
+
+          means0 = balanced_treated_control[[i]][, list(p = mean(get(ipw_covars_discrete))), by = list(treated, ref_event_time)]
+          means0[, (ipw_covars_discrete) := 0]
+          means0[treated == 1 & ref_event_time != omitted_event_time, weight := 1]
+          p_ref = means0[treated == 1 & ref_event_time != omitted_event_time]$p
+          means0[!(treated == 1 & ref_event_time != omitted_event_time), weight := (1) / ((p_ref * (1-p))/(p * (1-p_ref)) + 1)]
+          means0[, p := NULL]
+
+          means1 = balanced_treated_control[[i]][, list(p = mean(get(ipw_covars_discrete))), by = list(treated, ref_event_time)]
+          means1[, (ipw_covars_discrete) := 1]
+          means1[treated == 1 & ref_event_time != omitted_event_time, weight := 1]
+          p_ref = means1[treated == 1 & ref_event_time != omitted_event_time]$p
+          means1[!(treated == 1 & ref_event_time != omitted_event_time), weight := (p_ref * (1-p))/(p * (1-p_ref)) / ((p_ref * (1-p))/(p * (1-p_ref)) + 1)]
+          means1[, p := NULL]
+
+          means = rbindlist(list(means0, means1), use.names = TRUE)
+
+          balanced_treated_control[[i]] = merge(balanced_treated_control[[i]], means, by = c("treated", "ref_event_time", ipw_covars_discrete))
+          gc()
+
+          weight = "weight" # for the eventual na.omit()
+
+        } else if(ipw_composition_change == FALSE){
 
           formula_input <- paste0(paste0("factor(", na.omit(ipw_covars_discrete), ")", collapse = "+"),
                                   paste(na.omit(ipw_covars_cont), collapse = "+"),
@@ -204,10 +231,15 @@ ES_clean_data <- function(long_data,
           } else if(ipw_model == "probit"){
             balanced_treated_control[[i]][, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),family = binomial(link = "probit"), data = balanced_treated_control[[i]]))]
           }
+
+          weight = NA # just to make sure the next na.omit() below doesn't break
         }
 
 
-      } else{ pr = NA } # just to make sure the next na.omit() below doesn't break
+      } else{
+        pr = NA
+        weight = NA
+      } # just to make sure the next na.omit() below doesn't break
 
     }
 
@@ -221,7 +253,7 @@ ES_clean_data <- function(long_data,
     balanced_treated_control <- na.omit(balanced_treated_control)
     gc()
 
-    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont, pr, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
+    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont, pr, weight, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
     gc()
 
     balanced_treated_control <- NULL
