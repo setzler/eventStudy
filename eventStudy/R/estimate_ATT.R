@@ -50,16 +50,16 @@ ES_estimate_ATT <- function(ES_data,
 
         model_dt[treated == 1, weight := 1]
         model_dt[treated == 0, weight := (pr / (1 - pr))]
+
+        # This would be the place to add additional assumptions
+        # E.g., restrict to propensity scores strictly between 0 and 1
+
+        model_dt = model_dt[between(pr, 0, 1, incbounds = FALSE)]
+        gc()
       }
 
       # Pre-processing some issues of numerical precision
       model_dt[weight < 0, weight := 0]
-
-      # This would be the place to add additional assumptions
-      # E.g., restrict to propensity scores strictly between 0 and 1
-
-      model_dt = model_dt[between(pr, 0, 1, incbounds = FALSE)]
-      gc()
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
                   data = model_dt, weights = model_dt$weight,
@@ -113,16 +113,16 @@ ES_estimate_ATT <- function(ES_data,
 
         model_dt[treated == 1, weight := 1]
         model_dt[treated == 0, weight := (pr / (1 - pr))]
+
+        # This would be the place to add additional assumptions
+        # E.g., restrict to propensity scores strictly between 0 and 1
+
+        model_dt = model_dt[between(pr, 0, 1, incbounds = FALSE)]
+        gc()
       }
 
       # Pre-processing some issues of numerical precision
       model_dt[weight < 0, weight := 0]
-
-      # This would be the place to add additional assumptions
-      # E.g., restrict to propensity scores strictly between 0 and 1
-
-      model_dt = model_dt[between(pr, 0, 1, incbounds = FALSE)]
-      gc()
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
                   data = model_dt, weights = model_dt$weight,

@@ -137,85 +137,88 @@ ES_clean_data <- function(long_data,
 
         pr = "pr" # for the eventual na.omit()
 
-        # Given that the control group is (potentially) changing for each ref_onset_time X ref_event_time,
-        # we will need to estimate the propensity score one CATT at a time
-
-        ipw_covars_discrete_onset_pre=NA
-        ipw_covars_discrete_onset_post=NA
-        ipw_covars_cont_onset_pre=NA
-        ipw_covars_cont_onset_post=NA
-
         if(ipw_composition_change == TRUE){
 
-          if(!is.na(ipw_covars_discrete[1])){
-            for(var in na.omit(c(ipw_covars_discrete))){
-              varname_pre = sprintf("%s_at_onset_pre", var)
-              balanced_treated_control[[i]][, (varname_pre) := max(as.integer(get(var)*(ref_event_time==omitted_event_time))), by = unit_var]
-              ipw_covars_discrete_onset_pre = na.omit(c(ipw_covars_discrete_onset_pre, varname_pre))
-              varname_post = sprintf("%s_at_onset_post", var)
-              balanced_treated_control[[i]][, (varname_post) := max(as.integer(get(var)*(ref_event_time==t))), by = unit_var]
-              ipw_covars_discrete_onset_post = na.omit(c(ipw_covars_discrete_onset_post, varname_post))
-            }
-          }
+          # # First method -- manually weighting
+          # # Calculate mean of covariate in the four relevant cells - treat/control and pre/post
+          # # Then assign weights relative to a reference cell, separately for within-cell values of time_vary_var
+          #
+          # means0 = balanced_treated_control[[i]][, list(p = mean(get(ipw_covars_discrete))), by = list(treated, ref_event_time)]
+          # means0[, (ipw_covars_discrete) := 0]
+          # means0[treated == 1 & ref_event_time != omitted_event_time, weight_old := 1]
+          # p_ref = means0[treated == 1 & ref_event_time != omitted_event_time]$p
+          # means0[!(treated == 1 & ref_event_time != omitted_event_time), weight_old := (1) / ((p_ref * (1-p))/(p * (1-p_ref)) + 1)]
+          # means0[, p := NULL]
+          #
+          # means1 = balanced_treated_control[[i]][, list(p = mean(get(ipw_covars_discrete))), by = list(treated, ref_event_time)]
+          # means1[, (ipw_covars_discrete) := 1]
+          # means1[treated == 1 & ref_event_time != omitted_event_time, weight_old := 1]
+          # p_ref = means1[treated == 1 & ref_event_time != omitted_event_time]$p
+          # means1[!(treated == 1 & ref_event_time != omitted_event_time), weight_old := (p_ref * (1-p))/(p * (1-p_ref)) / ((p_ref * (1-p))/(p * (1-p_ref)) + 1)]
+          # means1[, p := NULL]
+          #
+          # means = rbindlist(list(means0, means1), use.names = TRUE)
+          #
+          # balanced_treated_control[[i]] = merge(balanced_treated_control[[i]], means, by = c("treated", "ref_event_time", ipw_covars_discrete))
+          # gc()
 
-          # I'm not sure that this is quite right below
-          if(!is.na(ipw_covars_cont[1])){
-            for(var in na.omit(c(ipw_covars_cont_onset))){
-              varname_pre = sprintf("%s_at_onset_pre", var)
-              balanced_treated_control[[i]][, (varname_pre) := max(as.integer(get(var)*(ref_event_time==omitted_event_time))), by = unit_var]
-              ipw_covars_cont_onset_pre = na.omit(c(ipw_covars_cont_onset_pre, varname_pre))
-              varname_post = sprintf("%s_at_onset_post", var)
-              balanced_treated_control[[i]][, (varname_post) := max(as.integer(get(var)*(ref_event_time==t))), by = unit_var]
-              ipw_covars_cont_onset_post = na.omit(c(ipw_covars_cont_onset_post, varname_post))
-            }
-          }
+          # Could instead do this through the propensity
+          # We have four groups in each CATT-specific sample -- Treated-Pre, Treated-Post, Control-Pre, and Control-Post
+          # Recall, reference group was treated == 1 and ref_event_time != omitted_event_time
+          # Approach: calculate three propensity scores, and weight relative to reference propensity score
 
-          formula_input_pre <- paste0(paste0("factor(", na.omit(ipw_covars_discrete_onset_pre), ")", collapse = "+"),
-                                  paste(na.omit(ipw_covars_cont_onset_pre), collapse = "+"),
+          # Reference group -- Treated-Post
+          balanced_treated_control[[i]][, ref_group := as.integer(treated == 1 & ref_event_time != omitted_event_time)]
+          balanced_treated_control[[i]][, treated_pre := as.integer(treated == 1 & ref_event_time == omitted_event_time)]
+          balanced_treated_control[[i]][, control_post := as.integer(treated == 0 & ref_event_time != omitted_event_time)]
+          balanced_treated_control[[i]][, control_pre := as.integer(treated == 0 & ref_event_time == omitted_event_time)]
+
+          formula_input <- paste0(paste0("factor(", na.omit(ipw_covars_discrete), ")", collapse = "+"),
+                                  paste(na.omit(ipw_covars_cont), collapse = "+"),
                                   collapse = "+"
                                   )
 
-          formula_input_post <- paste0(paste0("factor(", na.omit(ipw_covars_discrete_onset_post), ")", collapse = "+"),
-                                      paste(na.omit(ipw_covars_cont_onset_post), collapse = "+"),
-                                      collapse = "+"
-                                      )
+          balanced_treated_control[[i]][ref_group == 1 | treated_pre == 1, pr := predict(lm(as.formula(paste0("ref_group ~ ", formula_input)),data = balanced_treated_control[[i]][ref_group == 1 | treated_pre == 1]))]
+          balanced_treated_control[[i]][ref_group == 1 | control_post == 1, pr := predict(lm(as.formula(paste0("ref_group ~ ", formula_input)),data = balanced_treated_control[[i]][ref_group == 1 | control_post == 1]))]
+          balanced_treated_control[[i]][ref_group == 1 | control_pre == 1, pr := predict(lm(as.formula(paste0("ref_group ~ ", formula_input)),data = balanced_treated_control[[i]][ref_group == 1 | control_pre == 1]))]
 
-          if(ipw_model == "linear"){
-            balanced_treated_control[[i]][ref_event_time == omitted_event_time, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_pre)),data = balanced_treated_control[[i]][ref_event_time == omitted_event_time]))]
-            balanced_treated_control[[i]][ref_event_time == t, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_post)),data = balanced_treated_control[[i]][ref_event_time == t]))]
-          } else if(ipw_model == "logit"){
-            balanced_treated_control[[i]][ref_event_time == omitted_event_time, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input_pre)),family = binomial(link = "logit"), data = balanced_treated_control[[i]][ref_event_time == omitted_event_time]))]
-            balanced_treated_control[[i]][ref_event_time == t, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input_post)),family = binomial(link = "logit"), data = balanced_treated_control[[i]][ref_event_time == t]))]
-          } else if(ipw_model == "probit"){
-            balanced_treated_control[[i]][ref_event_time == omitted_event_time, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_pre)),family = binomial(link = "probit"), data = balanced_treated_control[[i]][ref_event_time == omitted_event_time]))]
-            balanced_treated_control[[i]][ref_event_time == t, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input_post)),family = binomial(link = "probit"), data = balanced_treated_control[[i]][ref_event_time == t]))]
-          }
+          balanced_treated_control[[i]][ref_group != 1, weight_unadj := pr / (1 - pr)]
+          balanced_treated_control[[i]][ref_group != 1, normalizing_constant := (1 / dim(balanced_treated_control[[i]][ref_group != 1])[1]) * sum(weight_unadj)]
+          balanced_treated_control[[i]][ref_group != 1, weight := weight_unadj / normalizing_constant]
+          balanced_treated_control[[i]][ref_group == 1, weight := 1]
+          balanced_treated_control[[i]][, c("weight_unadj", "normalizing_constant") := NULL]
 
-          # Will adopt a different approach in the time-varying case
-
-          # Calculate mean of covariate in the four relevant cells - treat/control and pre/post
-          # Then assign weights relative to a reference cell, separately for within-cell values of time_vary_var
-
-          means0 = balanced_treated_control[[i]][, list(p = mean(get(ipw_covars_discrete))), by = list(treated, ref_event_time)]
-          means0[, (ipw_covars_discrete) := 0]
-          means0[treated == 1 & ref_event_time != omitted_event_time, weight := 1]
-          p_ref = means0[treated == 1 & ref_event_time != omitted_event_time]$p
-          means0[!(treated == 1 & ref_event_time != omitted_event_time), weight := (1) / ((p_ref * (1-p))/(p * (1-p_ref)) + 1)]
-          means0[, p := NULL]
-
-          means1 = balanced_treated_control[[i]][, list(p = mean(get(ipw_covars_discrete))), by = list(treated, ref_event_time)]
-          means1[, (ipw_covars_discrete) := 1]
-          means1[treated == 1 & ref_event_time != omitted_event_time, weight := 1]
-          p_ref = means1[treated == 1 & ref_event_time != omitted_event_time]$p
-          means1[!(treated == 1 & ref_event_time != omitted_event_time), weight := (p_ref * (1-p))/(p * (1-p_ref)) / ((p_ref * (1-p))/(p * (1-p_ref)) + 1)]
-          means1[, p := NULL]
-
-          means = rbindlist(list(means0, means1), use.names = TRUE)
-
-          balanced_treated_control[[i]] = merge(balanced_treated_control[[i]], means, by = c("treated", "ref_event_time", ipw_covars_discrete))
-          gc()
+          # ## TO DELETE
+          #
+          # pr_check1 <- balanced_treated_control[[i]][, list(mean_age = mean(get(ipw_covars_discrete)),
+          #                             w_mean_age = weighted.mean(get(ipw_covars_discrete), w = weight_old)),
+          #                      by = list(treated, ref_event_time)
+          #                      ]
+          # gc()
+          # pr_check1 <- dcast(pr_check1, "ref_event_time ~ treated", value.var = c("mean_age", "w_mean_age"))
+          # setorderv(pr_check1, c("ref_event_time"))
+          #
+          # print(pr_check1)
+          #
+          # pr_check2 <- balanced_treated_control[[i]][, list(mean_age = mean(get(ipw_covars_discrete)),
+          #                                                   w_mean_age = weighted.mean(get(ipw_covars_discrete), w = weight)),
+          #                                            by = list(treated, ref_event_time)
+          #                                            ]
+          # gc()
+          # pr_check2 <- dcast(pr_check2, "ref_event_time ~ treated", value.var = c("mean_age", "w_mean_age"))
+          # setorderv(pr_check2, c("ref_event_time"))
+          #
+          # print(pr_check2)
+          #
+          # print(all.equal(pr_check1, pr_check2, tol = 10^-12))
+          #
+          # check = dim(pr_check2[abs(w_mean_age_0 - w_mean_age_1) > 10^-12])[1]
+          # print(ifelse(check > 0, sprintf("Weighted means of %s aren't identical - check propensity scores for errors.", ipw_covars_discrete), sprintf("Weighted means of %s are identical across 4 cells.", ipw_covars_discrete)))
+          #
+          # ## END TO DELETE
 
           weight = "weight" # for the eventual na.omit()
+
 
         } else if(ipw_composition_change == FALSE){
 
@@ -286,9 +289,9 @@ ES_clean_data <- function(long_data,
   flog.info("Successfully produced a stacked dataset.")
 
   if(ipw == TRUE & ipw_composition_change == TRUE){
-    flog.info("Estimated two seprate propensity score models per (ref_onset_time, CATT).")
+    flog.info("Estimated three seprate propensity score models per (ref_onset_time, CATT) with Treated-Post as the target population.")
   } else if(ipw == TRUE & ipw_composition_change == FALSE){
-    flog.info("Estimated one propensity score model per (ref_onset_time, CATT).")
+    flog.info("Estimated one propensity score model per (ref_onset_time, CATT) with Treated as the target population.")
   }
 
   return(stack_across_cohorts_balanced_treated_control)
