@@ -139,39 +139,69 @@ ES_clean_data <- function(long_data,
 
         if(ipw_composition_change == TRUE){
 
-          # # First method -- manually weighting
-          # # Calculate mean of covariate in the four relevant cells - treat/control and pre/post
-          # # Then assign weights relative to a reference cell, separately for within-cell values of time_vary_var
-          #
-          # means0 = balanced_treated_control[[i]][, list(p = mean(get(ipw_covars_discrete))), by = list(treated, ref_event_time)]
-          # means0[, (ipw_covars_discrete) := 0]
-          # means0[treated == 1 & ref_event_time != omitted_event_time, weight_old := 1]
-          # p_ref = means0[treated == 1 & ref_event_time != omitted_event_time]$p
-          # means0[!(treated == 1 & ref_event_time != omitted_event_time), weight_old := (1) / ((p_ref * (1-p))/(p * (1-p_ref)) + 1)]
-          # means0[, p := NULL]
-          #
-          # means1 = balanced_treated_control[[i]][, list(p = mean(get(ipw_covars_discrete))), by = list(treated, ref_event_time)]
-          # means1[, (ipw_covars_discrete) := 1]
-          # means1[treated == 1 & ref_event_time != omitted_event_time, weight_old := 1]
-          # p_ref = means1[treated == 1 & ref_event_time != omitted_event_time]$p
-          # means1[!(treated == 1 & ref_event_time != omitted_event_time), weight_old := (p_ref * (1-p))/(p * (1-p_ref)) / ((p_ref * (1-p))/(p * (1-p_ref)) + 1)]
-          # means1[, p := NULL]
-          #
-          # means = rbindlist(list(means0, means1), use.names = TRUE)
-          #
-          # balanced_treated_control[[i]] = merge(balanced_treated_control[[i]], means, by = c("treated", "ref_event_time", ipw_covars_discrete))
-          # gc()
-
-          # Could instead do this through the propensity
           # We have four groups in each CATT-specific sample -- Treated-Pre, Treated-Post, Control-Pre, and Control-Post
-          # Recall, reference group was treated == 1 and ref_event_time != omitted_event_time
+          # Set reference group was treated == 1 and ref_event_time != omitted_event_time
           # Approach: calculate three propensity scores, and weight relative to reference propensity score
 
           # Reference group -- Treated-Post
+
           balanced_treated_control[[i]][, ref_group := as.integer(treated == 1 & ref_event_time != omitted_event_time)]
           balanced_treated_control[[i]][, treated_pre := as.integer(treated == 1 & ref_event_time == omitted_event_time)]
           balanced_treated_control[[i]][, control_post := as.integer(treated == 0 & ref_event_time != omitted_event_time)]
           balanced_treated_control[[i]][, control_pre := as.integer(treated == 0 & ref_event_time == omitted_event_time)]
+
+          levels <- sort(unique(balanced_treated_control[[i]][[ipw_covars_discrete]]))
+          dropped_levels = NA
+          dropped_target_levels = NA
+
+          for(l in levels){
+
+            # Pre-check to establish where common support fails, if at all
+            check <- balanced_treated_control[[i]][, list(mean_age = mean(get(ipw_covars_discrete) == l)),
+                                                   by = list(ref_onset_time, catt_specific_sample, ref_group, treated, ref_event_time)
+                                                   ]
+            gc()
+            varname_mean <- sprintf("mean_age%s", l)
+            setnames(check, c("mean_age"), c(varname_mean))
+
+            check <- check[get(varname_mean) == 0]
+            if(dim(check)[1] > 0){
+
+              balanced_treated_control[[i]] <- balanced_treated_control[[i]][get(ipw_covars_discrete) != l]
+              dropped_levels = na.omit(c(dropped_levels, l))
+
+              if(sum(check$ref_group) == 1){
+                dropped_target_levels = na.omit(c(dropped_target_levels, l))
+              }
+
+            }
+
+          }
+
+          if(!is.na(dropped_levels[1]) & length(dropped_levels) > 0){
+            flog.info(paste0(sprintf("Dropped levels of %s for the ref_onset_time %s and ref_event_times (%s, %s) due to lack of common support: %s",
+                                     ipw_covars_discrete,
+                                     e,
+                                     omitted_event_time,
+                                     t,
+                                     paste0(dropped_levels, collapse = " , ")
+                                     )
+                             )
+                      )
+          }
+
+          if(!is.na(dropped_target_levels[1]) & length(dropped_target_levels) > 0){
+            flog.info(paste0(sprintf("Dropped levels of %s in target population for the ref_onset_time %s and ref_event_times (%s, %s): %s",
+                                     ipw_covars_discrete,
+                                     e,
+                                     omitted_event_time,
+                                     t,
+                                     paste0(dropped_target_levels, collapse = " , ")
+                                     )
+                             )
+                      )
+          }
+
 
           formula_input <- paste0(paste0("factor(", na.omit(ipw_covars_discrete), ")", collapse = "+"),
                                   paste(na.omit(ipw_covars_cont), collapse = "+"),
@@ -188,37 +218,7 @@ ES_clean_data <- function(long_data,
           balanced_treated_control[[i]][ref_group == 1, weight := 1]
           balanced_treated_control[[i]][, c("weight_unadj", "normalizing_constant") := NULL]
 
-          # ## TO DELETE
-          #
-          # pr_check1 <- balanced_treated_control[[i]][, list(mean_age = mean(get(ipw_covars_discrete)),
-          #                             w_mean_age = weighted.mean(get(ipw_covars_discrete), w = weight_old)),
-          #                      by = list(treated, ref_event_time)
-          #                      ]
-          # gc()
-          # pr_check1 <- dcast(pr_check1, "ref_event_time ~ treated", value.var = c("mean_age", "w_mean_age"))
-          # setorderv(pr_check1, c("ref_event_time"))
-          #
-          # print(pr_check1)
-          #
-          # pr_check2 <- balanced_treated_control[[i]][, list(mean_age = mean(get(ipw_covars_discrete)),
-          #                                                   w_mean_age = weighted.mean(get(ipw_covars_discrete), w = weight)),
-          #                                            by = list(treated, ref_event_time)
-          #                                            ]
-          # gc()
-          # pr_check2 <- dcast(pr_check2, "ref_event_time ~ treated", value.var = c("mean_age", "w_mean_age"))
-          # setorderv(pr_check2, c("ref_event_time"))
-          #
-          # print(pr_check2)
-          #
-          # print(all.equal(pr_check1, pr_check2, tol = 10^-12))
-          #
-          # check = dim(pr_check2[abs(w_mean_age_0 - w_mean_age_1) > 10^-12])[1]
-          # print(ifelse(check > 0, sprintf("Weighted means of %s aren't identical - check propensity scores for errors.", ipw_covars_discrete), sprintf("Weighted means of %s are identical across 4 cells.", ipw_covars_discrete)))
-          #
-          # ## END TO DELETE
-
           weight = "weight" # for the eventual na.omit()
-
 
         } else if(ipw_composition_change == FALSE){
 
@@ -249,7 +249,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control <- NULL
     gc()
 
-    # Now let's get all of these in one stacked data set specific to cohort es
+    # Now let's get all of these in one stacked data set specific to cohort e
     # Will build up from the pieces of the prior step together with a catt_specific_sample dummy
 
     balanced_treated_control <- rbindlist(balanced_treated_control, use.names = TRUE)

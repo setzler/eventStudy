@@ -182,45 +182,45 @@ binary_aging_figs <- function(){
   }
 }
 
-# bin_aging_figs <- function(){
-#
-#   u = 1e4
-#
-#   for(s in c(1,2)){
-#     results_aging_no_correction = ES_simulate_estimator_comparison(units = u,
-#                                                                    seed = s,
-#                                                                    homogeneous_ATT = TRUE,
-#                                                                    time_vary_confounds_high_dim = TRUE,
-#                                                                    correct_time_vary_confounds = FALSE
-#     )
-#     fig = results_aging_no_correction[[1]]
-#     ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_bin_aging.png", s, u), width = 12, height = 5)
-#
-#     results_aging_corrected = ES_simulate_estimator_comparison(units = u,
-#                                                                seed = s,
-#                                                                homogeneous_ATT = TRUE,
-#                                                                time_vary_confounds_high_dim = TRUE,
-#                                                                ipw_composition_change = FALSE,
-#                                                                correct_time_vary_confounds = TRUE,
-#                                                                ipw_covars_discrete = "time_vary_var_bin"
-#     )
-#     fig = results_aging_corrected[[1]]
-#     ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_bin_aging_1IPW_corrected.png", s, u), width = 12, height = 5)
-#
-#     results_aging_corrected = ES_simulate_estimator_comparison(units = u,
-#                                                                seed = s,
-#                                                                homogeneous_ATT = TRUE,
-#                                                                time_vary_confounds_high_dim = TRUE,
-#                                                                ipw_composition_change = TRUE,
-#                                                                correct_time_vary_confounds = TRUE,
-#                                                                ipw_covars_discrete = "time_vary_var_bin"
-#     )
-#     fig = results_aging_corrected[[1]]
-#     ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_bin_aging_2IPW_corrected.png", s, u), width = 12, height = 5)
-#
-#
-#   }
-# }
+bin_aging_figs <- function(){
+
+  u = 1e4
+
+  for(s in c(1,2)){
+    results_aging_no_correction = ES_simulate_estimator_comparison(units = u,
+                                                                   seed = s,
+                                                                   homogeneous_ATT = TRUE,
+                                                                   time_vary_confounds_high_dim = TRUE,
+                                                                   correct_time_vary_confounds = FALSE
+    )
+    fig = results_aging_no_correction[[1]]
+    ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_bin_aging.png", s, u), width = 12, height = 5)
+
+    results_aging_corrected = ES_simulate_estimator_comparison(units = u,
+                                                               seed = s,
+                                                               homogeneous_ATT = TRUE,
+                                                               time_vary_confounds_high_dim = TRUE,
+                                                               ipw_composition_change = FALSE,
+                                                               correct_time_vary_confounds = TRUE,
+                                                               ipw_covars_discrete = "time_vary_var_bin"
+    )
+    fig = results_aging_corrected[[1]]
+    ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_bin_aging_1IPW_corrected.png", s, u), width = 12, height = 5)
+
+    results_aging_corrected = ES_simulate_estimator_comparison(units = u,
+                                                               seed = s,
+                                                               homogeneous_ATT = TRUE,
+                                                               time_vary_confounds_high_dim = TRUE,
+                                                               ipw_composition_change = TRUE,
+                                                               correct_time_vary_confounds = TRUE,
+                                                               ipw_covars_discrete = "time_vary_var_bin"
+    )
+    fig = results_aging_corrected[[1]]
+    ggsave(sprintf("inst/figures/event_time_all_seed%s_size%s_bin_aging_2IPW_corrected.png", s, u), width = 12, height = 5)
+
+
+  }
+}
 #
 # levels_aging_figs <- function(){
 #
