@@ -264,6 +264,7 @@ ES_simulate_data <- function(units = 1e4,
     output[[4]] <- age_changes
   }
 
+  output[["observed"]] <- sim_data[,list(individual=tin,year=tax_yr,treatment_year=win_yr,outcome=outcome)]
 
   return(output)
 }

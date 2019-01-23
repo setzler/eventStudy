@@ -3,6 +3,8 @@ eventStudy: an R package for Event Studies
 
 Created by David Novgorodsky and Bradley Setzler, University of Chicago
 
+By using this software, you accept the terms of the MIT license.
+
 Note: This is a work in progress. It is updated frequently. Please let us know if you find any bugs or have questions that are not addressed in the documentation.
 
 Overview
@@ -49,3 +51,88 @@ Plotting the results
 
 -   `ES_plot_levels` will plot the levels across event times for the treated and control cohorts.
 -   `ES_plot_ATTs` will plot the treatment effects across event times. By default, it will plot heterogeneous effects for each cohort; set `homogeneous_only = TRUE` to only plot the pooled effect under the homogeneity assumption.
+
+Examples
+========
+
+Getting started
+---------------
+
+``` r
+devtools::install_github("setzler/eventStudy")
+```
+
+``` r
+library(ggplot2)
+library(eventStudy)
+```
+
+Example 1: Perfect Control Groups
+---------------------------------
+
+First, we simulate some data using our function called `ES_simulate_data`:
+
+``` r
+# simulate the data with 1000 individuals (use only the first element)
+sim_data <- ES_simulate_data(units = 1000)[["observed"]]
+# print what it looks lik
+sim_data[]
+```
+
+    ##       individual year treatment_year   outcome
+    ##    1:          1 1999           2005 0.5085578
+    ##    2:          1 2000           2005 0.4346124
+    ##    3:          1 2001           2005 0.2851991
+    ##    4:          1 2002           2005 0.7149552
+    ##    5:          1 2003           2005 0.8737153
+    ##   ---                                         
+    ## 6996:       1000 2001           2003 0.6139857
+    ## 6997:       1000 2002           2003 1.2743535
+    ## 6998:       1000 2003           2003 0.3305345
+    ## 6999:       1000 2004           2003 0.4619364
+    ## 7000:       1000 2005           2003 0.6304014
+
+In this data, the treatment is received in the year given by the `treatment_year` variable. The other variables are `individual`, `year`, and `outcome`. We wish to perform an event study to understand the effect of this treatment on this outcome.
+
+Here is a plot of the mean outcomes by year at which treatment is received:
+
+``` r
+# calculate the means
+cohort_means <- sim_data[,list(outcome = mean(outcome)), list(treatment_year,year)]
+# plot the means
+ggplot(data=cohort_means,aes(x=year,y=outcome,colour=factor(treatment_year))) + geom_line() + labs(x = "Year", y = "Outcome", color = "Treatment") + theme_bw(base_size=16)
+```
+
+![](README_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-4-1.png)
+
+(Note: even though the data is drawn from the model with perfect control groups, the control groups do not look great visually!)
+
+Given this data, we perform the event study as follows:
+
+``` r
+# run the event study
+results <- ES(long_data=sim_data, outcomevar="outcome", unit_var="individual", cal_time_var="year", onset_time_var="treatment_year", cluster_vars="individual")
+```
+
+    ## Warning in as.POSIXlt.POSIXct(x, tz): unknown timezone 'zone/tz/2018i.1.0/
+    ## zoneinfo/America/Chicago'
+
+    ## INFO [2019-01-23 23:15:04] Successfully produced a stacked dataset.
+    ## INFO [2019-01-23 23:15:04] Estimated heterogeneous case with OLS.
+    ## INFO [2019-01-23 23:15:05] Estimated homogeneous case with OLS.
+
+Now, we plot the results. First, we plot the treatment and control means. The ES function has constructed the appropriate control group for each treatment group. We can see that it looks much cleaner than in the raw data:
+
+``` r
+ES_plot_levels(results, lower_event = -3, upper_event = 5) + ylab("Mean of the Outcome")
+```
+
+![](README_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-6-1.png)
+
+Finally, we plot the treatment effects, comparing the cohort-specific effects to the pooled effect that comes from imposing homogeneity across cohorts:
+
+``` r
+ES_plot_ATTs(results, lower_event = -3, upper_event = 5) + ylab("Mean of the Outcome")
+```
+
+![](README_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-7-1.png)
