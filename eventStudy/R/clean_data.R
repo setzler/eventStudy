@@ -395,7 +395,8 @@ ES_residualize_time_varying_covar <- function(long_data,
 ES_expand_to_balance <- function(long_data,
                                  vars_to_fill = NULL,
                                  unit_var,
-                                 cal_time_var
+                                 cal_time_var,
+                                 onset_time_var
                                  ) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
@@ -415,6 +416,8 @@ ES_expand_to_balance <- function(long_data,
 
   setorderv(input_dt, c(unit_var, cal_time_var))
   gc()
+
+  input_dt[, (onset_time_var) := unique(get(onset_time_var)[!is.na(get(onset_time_var))]), list(unit_var)]
 
   flog.info("Expanded provided data to balanced panel and filled missings with 0 for vars_to_fill.")
 

@@ -3,7 +3,12 @@
 #' @export
 ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                omitted_event_time= -2, min_control_gap=1, max_control_gap=Inf,
-               control_subset_var=NA, control_subset_event_time=0){
+               control_subset_var=NA, control_subset_event_time=0, fill_zeros=F, vars_to_fill=NULL){
+
+  # fill with zeros
+  if(fill_zeros){
+    long_data <- ES_expand_to_balance(long_data, vars_to_fill = vars_to_fill, unit_var, cal_time_var)
+  }
 
   # process data
   ES_data <- ES_clean_data(long_data = long_data, outcomevar = outcomevar,
