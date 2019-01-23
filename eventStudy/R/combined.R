@@ -7,7 +7,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
   # fill with zeros
   if(fill_zeros){
-    long_data <- ES_expand_to_balance(long_data, vars_to_fill = vars_to_fill, unit_var, cal_time_var)
+    long_data <- ES_expand_to_balance(long_data, vars_to_fill = vars_to_fill, unit_var, cal_time_var, onset_time_var)
   }
 
   # process data
