@@ -3,12 +3,12 @@ eventStudy: Perform an Event Study in R
 
 Created by David Novgorodsky and Bradley Setzler, University of Chicago
 
-By using this software, you accept the terms of the MIT license.
+Also see [our Practical Guide to Event Studies](https://github.com/setzler/eventStudy/blob/master/guide/event_study_guide.pdf).
 
-Note: This is a work in progress. It is updated frequently. Please let us know if you find any bugs or have questions that are not addressed in the documentation.
+**Disclaimer:** By using this software, you accept the terms of the MIT license. This is a work in progress. It is updated frequently. Please let us know if you find any bugs or have questions that are not addressed in the documentation.
 
 Overview
---------
+========
 
 `eventStudy` is an R package for performing event studies. It has many capabilites:
 
@@ -16,12 +16,10 @@ Overview
 -   It allows the estimated treatment effects to vary over time and by treatment cohort. It can also impose a common treatment effect across cohorts (extending results by Abraham and Sun, 2018);
 -   It has built-in tools to correct for anticipation (extending results by Fadlon & Nielsen, 2018) and deviations from parallel trends (either using covariate balancing in the spirit of Abadie, 2003, or modeling parametric deviations from parallel trends).
 
-We wrote a practical guide to event studies that explains all of the identification and estimation issues [available here](https://github.com/setzler/eventStudy/blob/master/guide/event_study_guide.pdf).
-
 The latest version of the package can be installed with the command `devtools::install_github("setzler/eventStudy")`.
 
 The `ES` command
-----------------
+================
 
 The event study is performed by the `ES` command.
 
@@ -46,8 +44,7 @@ These commands allow you to customize the event study to deal with issues like a
 -   `control_subset_var` and `control_subset_event_time`: These variables allow one to require that the control group satisfies a logical condition at a given event time. `control_subset_var` must be the name of a logical variable in the data (all values of this variable are `TRUE` or `FALSE`) and `control_subset_event_time` is an integer which specifies the event time at which the control group must have a value of `TRUE` on `control_subset_var`. The default is `control_subset_var=NA`, which bypasses this option.
 -   `fill_zeros` and `vars_to_fill`: `fill_zeros` is a logical indicator (`TRUE` or `FALSE`) which results in the data being filled for all observations that are missing. If an individual (`unit_var`) does not have a row of data for some calendar time (`cal_time_var`), such a row will be created when `fill_zeros=TRUE`. The outcome variable will have a missing value `NA` for any created rows. `vars_to_fill` is a `character` vector of variable names for which `NA` should be replaced by `0`. This is useful if missing data indicates that the true value of the outcome is zero (in this case, set `fill_zeros=TRUE` and `vars_to_fill` should include the `outcomevar`).
 
-Plotting the results
---------------------
+### Plotting the results from `ES`
 
 You can make your own plots with the results. As a convenience, we have prepared these functions to automatically make your plots:
 
@@ -57,8 +54,7 @@ You can make your own plots with the results. As a convenience, we have prepared
 Examples
 ========
 
-Getting started
----------------
+### Getting started
 
 ``` r
 devtools::install_github("setzler/eventStudy")
@@ -69,8 +65,7 @@ library(eventStudy)
 library(ggplot2)
 ```
 
-Example 1: Perfect Control Groups
----------------------------------
+### Example 1: Perfect Control Groups
 
 First, we simulate some data using our function called `ES_simulate_data`:
 
@@ -81,18 +76,18 @@ sim_data <- ES_simulate_data(units = 1000)[["observed"]]
 sim_data[]
 ```
 
-    ##       individual year treatment_year    outcome
-    ##    1:          1 1999           2002 0.30258885
-    ##    2:          1 2000           2002 0.67674199
-    ##    3:          1 2001           2002 1.08722711
-    ##    4:          1 2002           2002 0.60191240
-    ##    5:          1 2003           2002 0.02669948
-    ##   ---                                          
-    ## 6996:       1000 2001           2003 1.23179525
-    ## 6997:       1000 2002           2003 0.66567866
-    ## 6998:       1000 2003           2003 0.55033053
-    ## 6999:       1000 2004           2003 0.44312152
-    ## 7000:       1000 2005           2003 0.15379552
+    ##       individual year treatment_year   outcome
+    ##    1:          1 1999           2006 0.4659262
+    ##    2:          1 2000           2006 1.0443166
+    ##    3:          1 2001           2006 0.4022417
+    ##    4:          1 2002           2006 0.9955854
+    ##    5:          1 2003           2006 0.6880951
+    ##   ---                                         
+    ## 6996:       1000 2001           2002 0.8215460
+    ## 6997:       1000 2002           2002 0.6936623
+    ## 6998:       1000 2003           2002 0.8240132
+    ## 6999:       1000 2004           2002 0.4881100
+    ## 7000:       1000 2005           2002 0.6805106
 
 In this data, the treatment is received in the year given by the `treatment_year` variable. The other variables are `individual`, `year`, and `outcome`. We wish to perform an event study to understand the effect of this treatment on this outcome.
 
@@ -119,9 +114,9 @@ results <- ES(long_data=sim_data, outcomevar="outcome", unit_var="individual", c
     ## Warning in as.POSIXlt.POSIXct(x, tz): unknown timezone 'zone/tz/2018i.1.0/
     ## zoneinfo/America/Chicago'
 
-    ## INFO [2019-01-23 23:29:45] Successfully produced a stacked dataset.
-    ## INFO [2019-01-23 23:29:46] Estimated heterogeneous case with OLS.
-    ## INFO [2019-01-23 23:29:47] Estimated homogeneous case with OLS.
+    ## INFO [2019-01-23 23:36:33] Successfully produced a stacked dataset.
+    ## INFO [2019-01-23 23:36:34] Estimated heterogeneous case with OLS.
+    ## INFO [2019-01-23 23:36:34] Estimated homogeneous case with OLS.
 
 Now, we plot the results. First, we plot the treatment and control means. The ES function has constructed the appropriate control group for each treatment group. We can see that it looks much cleaner than in the raw data:
 

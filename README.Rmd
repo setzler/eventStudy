@@ -10,13 +10,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Created by David Novgorodsky and Bradley Setzler, University of Chicago
 
-By using this software, you accept the terms of the MIT license.
+Also see [our Practical Guide to Event Studies](https://github.com/setzler/eventStudy/blob/master/guide/event_study_guide.pdf).
 
-Note: This is a work in progress. It is updated frequently. Please let us know if you find any bugs or have questions that are not addressed in the documentation.
+**Disclaimer:** By using this software, you accept the terms of the MIT license. This is a work in progress. It is updated frequently. Please let us know if you find any bugs or have questions that are not addressed in the documentation.
 
 
 
-## Overview
+# Overview
 
 `eventStudy` is an R package for performing event studies. It has many capabilites:
 
@@ -24,12 +24,12 @@ Note: This is a work in progress. It is updated frequently. Please let us know i
 - It allows the estimated treatment effects to vary over time and by treatment cohort. It can also impose a common treatment effect across cohorts (extending results by Abraham and Sun, 2018);
 - It has built-in tools to correct for anticipation (extending results by Fadlon & Nielsen, 2018) and deviations from parallel trends (either using covariate balancing in the spirit of Abadie, 2003, or modeling parametric deviations from parallel trends).
 
-We wrote a practical guide to event studies that explains all of the identification and estimation issues [available here](https://github.com/setzler/eventStudy/blob/master/guide/event_study_guide.pdf). 
+
 
 
 The latest version of the package can be installed with the command `devtools::install_github("setzler/eventStudy")`.
 
-## The `ES` command
+# The `ES` command
 
 The event study is performed by the `ES` command.
 
@@ -55,7 +55,7 @@ These commands allow you to customize the event study to deal with issues like a
 - `fill_zeros` and `vars_to_fill`: `fill_zeros` is a logical indicator (`TRUE` or `FALSE`) which results in the data being filled for all observations that are missing. If an individual (`unit_var`) does not have a row of data for some calendar time (`cal_time_var`), such a row will be created when `fill_zeros=TRUE`. The outcome variable will have a missing value `NA` for any created rows. `vars_to_fill` is a `character` vector of variable names for which `NA` should be replaced by `0`. This is useful if missing data indicates that the true value of the outcome is zero (in this case, set `fill_zeros=TRUE` and `vars_to_fill` should include the `outcomevar`).
 
 
-## Plotting the results
+### Plotting the results from `ES`
 
 You can make your own plots with the results. As a convenience, we have prepared these functions to automatically make your plots:
 
@@ -65,7 +65,7 @@ You can make your own plots with the results. As a convenience, we have prepared
 
 # Examples
 
-## Getting started
+### Getting started
 
 ```{r echo=T, eval=F}
 devtools::install_github("setzler/eventStudy")
@@ -78,7 +78,7 @@ library(ggplot2)
 
 
 
-## Example 1: Perfect Control Groups
+### Example 1: Perfect Control Groups
 
 First, we simulate some data using our function called `ES_simulate_data`:
 
