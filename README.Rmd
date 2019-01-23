@@ -1,5 +1,5 @@
 ---
-title: "eventStudy: an R package for Event Studies"
+title: "eventStudy: Perform an Event Study in R"
 output: github_document
 ---
 
@@ -57,6 +57,8 @@ These commands allow you to customize the event study to deal with issues like a
 
 ## Plotting the results
 
+You can make your own plots with the results. As a convenience, we have prepared these functions to automatically make your plots:
+
 - `ES_plot_levels` will plot the levels across event times for the treated and control cohorts.
 - `ES_plot_ATTs` will plot the treatment effects across event times. By default, it will plot heterogeneous effects for each cohort; set `homogeneous_only = TRUE` to only plot the pooled effect under the homogeneity assumption.
 
@@ -69,9 +71,9 @@ These commands allow you to customize the event study to deal with issues like a
 devtools::install_github("setzler/eventStudy")
 ```
 
-```{r echo=T, eval=T}
-library(ggplot2)
+```{r echo=T, eval=T, message=FALSE}
 library(eventStudy)
+library(ggplot2)
 ```
 
 
@@ -80,10 +82,10 @@ library(eventStudy)
 
 First, we simulate some data using our function called `ES_simulate_data`:
 
-```{r echo=T, eval=T}
+```{r echo=T, eval=T, message=FALSE}
 # simulate the data with 1000 individuals (use only the first element)
 sim_data <- ES_simulate_data(units = 1000)[["observed"]]
-# print what it looks lik
+# view the simulated data
 sim_data[]
 ```
 
@@ -91,7 +93,7 @@ In this data, the treatment is received in the year given by the `treatment_year
 
 Here is a plot of the mean outcomes by year at which treatment is received:
 
-```{r echo=T, eval=T}
+```{r echo=T, eval=T, message=FALSE}
 # calculate the means
 cohort_means <- sim_data[,list(outcome = mean(outcome)), list(treatment_year,year)]
 # plot the means
@@ -102,22 +104,23 @@ ggplot(data=cohort_means,aes(x=year,y=outcome,colour=factor(treatment_year))) + 
 
 Given this data, we perform the event study as follows:
 
-```{r echo=T, eval=T}
+```{r echo=T, eval=T, message=FALSE}
 # run the event study
 results <- ES(long_data=sim_data, outcomevar="outcome", unit_var="individual", cal_time_var="year", onset_time_var="treatment_year", cluster_vars="individual")
 ```
 
+
 Now, we plot the results. First, we plot the treatment and control means. The ES function has constructed the appropriate control group for each treatment group. We can see that it looks much cleaner than in the raw data:
 
-```{r echo=T, eval=T}
+```{r echo=T, eval=T, message=FALSE}
 ES_plot_levels(results, lower_event = -3, upper_event = 5) + ylab("Mean of the Outcome")
 
 ```
 
 Finally, we plot the treatment effects, comparing the cohort-specific effects to the pooled effect that comes from imposing homogeneity across cohorts:
 
-```{r echo=T, eval=T}
-ES_plot_ATTs(results, lower_event = -3, upper_event = 5) 
+```{r echo=T, eval=T, message=FALSE}
+ES_plot_ATTs(results, lower_event = -3, upper_event = 5) + ylab("ATT Estimate (95% CI)")
 
 ```
 

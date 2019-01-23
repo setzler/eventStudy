@@ -1,4 +1,4 @@
-eventStudy: an R package for Event Studies
+eventStudy: Perform an Event Study in R
 ================
 
 Created by David Novgorodsky and Bradley Setzler, University of Chicago
@@ -49,6 +49,8 @@ These commands allow you to customize the event study to deal with issues like a
 Plotting the results
 --------------------
 
+You can make your own plots with the results. As a convenience, we have prepared these functions to automatically make your plots:
+
 -   `ES_plot_levels` will plot the levels across event times for the treated and control cohorts.
 -   `ES_plot_ATTs` will plot the treatment effects across event times. By default, it will plot heterogeneous effects for each cohort; set `homogeneous_only = TRUE` to only plot the pooled effect under the homogeneity assumption.
 
@@ -63,8 +65,8 @@ devtools::install_github("setzler/eventStudy")
 ```
 
 ``` r
-library(ggplot2)
 library(eventStudy)
+library(ggplot2)
 ```
 
 Example 1: Perfect Control Groups
@@ -75,22 +77,22 @@ First, we simulate some data using our function called `ES_simulate_data`:
 ``` r
 # simulate the data with 1000 individuals (use only the first element)
 sim_data <- ES_simulate_data(units = 1000)[["observed"]]
-# print what it looks lik
+# view the simulated data
 sim_data[]
 ```
 
-    ##       individual year treatment_year   outcome
-    ##    1:          1 1999           2005 0.5085578
-    ##    2:          1 2000           2005 0.4346124
-    ##    3:          1 2001           2005 0.2851991
-    ##    4:          1 2002           2005 0.7149552
-    ##    5:          1 2003           2005 0.8737153
-    ##   ---                                         
-    ## 6996:       1000 2001           2003 0.6139857
-    ## 6997:       1000 2002           2003 1.2743535
-    ## 6998:       1000 2003           2003 0.3305345
-    ## 6999:       1000 2004           2003 0.4619364
-    ## 7000:       1000 2005           2003 0.6304014
+    ##       individual year treatment_year    outcome
+    ##    1:          1 1999           2002 0.30258885
+    ##    2:          1 2000           2002 0.67674199
+    ##    3:          1 2001           2002 1.08722711
+    ##    4:          1 2002           2002 0.60191240
+    ##    5:          1 2003           2002 0.02669948
+    ##   ---                                          
+    ## 6996:       1000 2001           2003 1.23179525
+    ## 6997:       1000 2002           2003 0.66567866
+    ## 6998:       1000 2003           2003 0.55033053
+    ## 6999:       1000 2004           2003 0.44312152
+    ## 7000:       1000 2005           2003 0.15379552
 
 In this data, the treatment is received in the year given by the `treatment_year` variable. The other variables are `individual`, `year`, and `outcome`. We wish to perform an event study to understand the effect of this treatment on this outcome.
 
@@ -117,9 +119,9 @@ results <- ES(long_data=sim_data, outcomevar="outcome", unit_var="individual", c
     ## Warning in as.POSIXlt.POSIXct(x, tz): unknown timezone 'zone/tz/2018i.1.0/
     ## zoneinfo/America/Chicago'
 
-    ## INFO [2019-01-23 23:15:04] Successfully produced a stacked dataset.
-    ## INFO [2019-01-23 23:15:04] Estimated heterogeneous case with OLS.
-    ## INFO [2019-01-23 23:15:05] Estimated homogeneous case with OLS.
+    ## INFO [2019-01-23 23:29:45] Successfully produced a stacked dataset.
+    ## INFO [2019-01-23 23:29:46] Estimated heterogeneous case with OLS.
+    ## INFO [2019-01-23 23:29:47] Estimated homogeneous case with OLS.
 
 Now, we plot the results. First, we plot the treatment and control means. The ES function has constructed the appropriate control group for each treatment group. We can see that it looks much cleaner than in the raw data:
 
@@ -132,7 +134,7 @@ ES_plot_levels(results, lower_event = -3, upper_event = 5) + ylab("Mean of the O
 Finally, we plot the treatment effects, comparing the cohort-specific effects to the pooled effect that comes from imposing homogeneity across cohorts:
 
 ``` r
-ES_plot_ATTs(results, lower_event = -3, upper_event = 5) + ylab("Mean of the Outcome")
+ES_plot_ATTs(results, lower_event = -3, upper_event = 5) + ylab("ATT Estimate (95% CI)")
 ```
 
 ![](README_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-7-1.png)
