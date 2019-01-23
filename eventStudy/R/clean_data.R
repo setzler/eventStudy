@@ -391,3 +391,55 @@ ES_residualize_time_varying_covar <- function(long_data,
 
   return(input_dt)
 }
+
+ES_expand_to_balance <- function(long_data,
+                                 vars_to_fill = NULL,
+                                 unit_var,
+                                 cal_time_var
+                                 ) {
+
+  # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
+  # Can revisit this to remove the copy for memory efficiency at a later point.
+
+  input_dt <- copy(long_data)
+
+  # Expand input_dt to maximal balanced panel, introducing NAs where needed
+  input_dt <- setDT(input_dt, key = c(unit_var, cal_time_var))[CJ(get(unit_var), get(cal_time_var), unique=TRUE)]
+
+  if(!is.null(vars_to_fill)){
+    # replace NAs of provided vars_to_fill columns with zeros
+    for (j in vars_to_fill){
+      set(input_dt, which(is.na(input_dt[[j]])), j, 0)
+    }
+  }
+
+  setorderv(input_dt, c(unit_var, cal_time_var))
+  gc()
+
+  flog.info("Expanded provided data to balanced panel and filled missings with 0 for vars_to_fill.")
+
+  return(input_dt)
+}
+
+ES_subset_to_balance <- function(long_data,
+                                 unit_var,
+                                 cal_time_var
+                                 ) {
+
+  # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
+  # Can revisit this to remove the copy for memory efficiency at a later point.
+
+  input_dt <- copy(long_data)
+
+  # find the minimal and maximal calendar times and keep only units that have them all
+  years <- length(sort(unique(input_dt[[cal_time_var]])))
+  keep_units = input_dt[, .N, by = unit_var][N == years][[unit_var]]
+  input_dt <- input_dt[get(unit_var) %in% keep_units]
+
+  setorderv(input_dt, c(unit_var, cal_time_var))
+  gc()
+
+  flog.info("Reduced provided data to balanced panel.")
+
+  return(input_dt)
+}
