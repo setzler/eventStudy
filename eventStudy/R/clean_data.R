@@ -318,7 +318,6 @@ ES_residualize_time_varying_covar <- function(long_data,
   gc()
 
   results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
-  print(results)
   est <- NULL
   gc()
 
