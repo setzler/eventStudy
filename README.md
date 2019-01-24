@@ -3,7 +3,7 @@ eventStudy: Perform an Event Study in R
 
 Created by David Novgorodsky and Bradley Setzler, University of Chicago
 
-Also see [our Practical Guide to Event Studies](https://github.com/setzler/eventStudy/blob/master/guide/event_study_guide.pdf).
+The methods are explained in [our companion Practical Guide to Event Studies](https://github.com/setzler/eventStudy/blob/master/guide/event_study_guide.pdf).
 
 **Disclaimer:** By using this software, you accept the terms of the MIT license. This is a work in progress. It is updated frequently. Please let us know if you find any bugs or have questions that are not addressed in the documentation.
 
@@ -16,12 +16,12 @@ Overview
 -   It allows the estimated treatment effects to vary over time and by treatment cohort. It can also impose a common treatment effect across cohorts (extending results by Abraham and Sun, 2018);
 -   It has built-in tools to correct for anticipation (extending results by Fadlon & Nielsen, 2018) and deviations from parallel trends (either using covariate balancing in the spirit of Abadie, 2003, or modeling parametric deviations from parallel trends).
 
-The latest version of the package can be installed with the command `devtools::install_github("setzler/eventStudy")`.
+The latest version of the package can be installed with the command `devtools::install_github("setzler/eventStudy/eventStudy")`.
 
 The `ES` command
 ================
 
-The event study is performed by the `ES` command.
+The event study is performed by the `ES` command. The examples below show how to use it.
 
 ### Required Arguments of the `ES` command:
 
@@ -57,7 +57,7 @@ Examples
 ### Getting started
 
 ``` r
-devtools::install_github("setzler/eventStudy")
+devtools::install_github("setzler/eventStudy/eventStudy")
 ```
 
 ``` r
@@ -76,18 +76,18 @@ sim_data <- ES_simulate_data(units = 1000)[["observed"]]
 sim_data[]
 ```
 
-    ##       individual year treatment_year   outcome
-    ##    1:          1 1999           2006 0.4659262
-    ##    2:          1 2000           2006 1.0443166
-    ##    3:          1 2001           2006 0.4022417
-    ##    4:          1 2002           2006 0.9955854
-    ##    5:          1 2003           2006 0.6880951
-    ##   ---                                         
-    ## 6996:       1000 2001           2002 0.8215460
-    ## 6997:       1000 2002           2002 0.6936623
-    ## 6998:       1000 2003           2002 0.8240132
-    ## 6999:       1000 2004           2002 0.4881100
-    ## 7000:       1000 2005           2002 0.6805106
+    ##       individual year treatment_year    outcome
+    ##    1:          1 1999           2003 0.98167844
+    ##    2:          1 2000           2003 0.57279337
+    ##    3:          1 2001           2003 0.97588704
+    ##    4:          1 2002           2003 0.82146202
+    ##    5:          1 2003           2003 0.08554867
+    ##   ---                                          
+    ## 6996:       1000 2001           2003 0.60283019
+    ## 6997:       1000 2002           2003 0.79329822
+    ## 6998:       1000 2003           2003 0.60895439
+    ## 6999:       1000 2004           2003 0.24397755
+    ## 7000:       1000 2005           2003 0.70081946
 
 In this data, the treatment is received in the year given by the `treatment_year` variable. The other variables are `individual`, `year`, and `outcome`. We wish to perform an event study to understand the effect of this treatment on this outcome.
 
@@ -114,9 +114,9 @@ results <- ES(long_data=sim_data, outcomevar="outcome", unit_var="individual", c
     ## Warning in as.POSIXlt.POSIXct(x, tz): unknown timezone 'zone/tz/2018i.1.0/
     ## zoneinfo/America/Chicago'
 
-    ## INFO [2019-01-23 23:36:33] Successfully produced a stacked dataset.
-    ## INFO [2019-01-23 23:36:34] Estimated heterogeneous case with OLS.
-    ## INFO [2019-01-23 23:36:34] Estimated homogeneous case with OLS.
+    ## INFO [2019-01-24 00:51:01] Successfully produced a stacked dataset.
+    ## INFO [2019-01-24 00:51:02] Estimated heterogeneous case with OLS.
+    ## INFO [2019-01-24 00:51:02] Estimated homogeneous case with OLS.
 
 Now, we plot the results. First, we plot the treatment and control means. The ES function has constructed the appropriate control group for each treatment group. We can see that it looks much cleaner than in the raw data:
 

@@ -1,7 +1,6 @@
 exportPattern("^[[:alpha:]]+")
 import(data.table)
 import(futile.logger)
-import(mltools)
 import(checkmate)
 import(lfe)
 import(ggplot2)
