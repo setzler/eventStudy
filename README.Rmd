@@ -18,6 +18,8 @@ The methods are explained in [our companion Practical Guide to Event Studies](ht
 
 # Overview
 
+### Purpose
+
 `eventStudy` is an R package for performing event studies. It has many capabilites:
 
 - It maximizes sample size by using a "stacked" approach to match all possible control observations to any given treatment observation at any event time;
@@ -25,9 +27,11 @@ The methods are explained in [our companion Practical Guide to Event Studies](ht
 - It has built-in tools to correct for anticipation (extending results by Fadlon & Nielsen, 2018) and deviations from parallel trends (either using covariate balancing in the spirit of Abadie, 2003, or modeling parametric deviations from parallel trends).
 
 
+### Installation
 
+**Preferred method:** The latest version of the package can be installed with the command `devtools::install_github("setzler/eventStudy/eventStudy")`.
 
-The latest version of the package can be installed with the command `devtools::install_github("setzler/eventStudy/eventStudy")`.
+Installation without internet access: Clone this repo to your personal machine, use the command line approach of `R CMD BUILD eventStudy/` to build the file eventStudy_0.1.0.tar.gz, move this .tar.gz file to the location without internet access, then install on that location using the command `install.package("eventStudy_0.1.0.tar.gz",repo=NULL)` within an R session. In case you cannot clone and build the repo, we provide a (possibly out of date) version of the .tar.gz file above.
 
 # The `ES` command
 

@@ -10,13 +10,19 @@ The methods are explained in [our companion Practical Guide to Event Studies](ht
 Overview
 ========
 
+### Purpose
+
 `eventStudy` is an R package for performing event studies. It has many capabilites:
 
 -   It maximizes sample size by using a "stacked" approach to match all possible control observations to any given treatment observation at any event time;
 -   It allows the estimated treatment effects to vary over time and by treatment cohort. It can also impose a common treatment effect across cohorts (extending results by Abraham and Sun, 2018);
 -   It has built-in tools to correct for anticipation (extending results by Fadlon & Nielsen, 2018) and deviations from parallel trends (either using covariate balancing in the spirit of Abadie, 2003, or modeling parametric deviations from parallel trends).
 
-The latest version of the package can be installed with the command `devtools::install_github("setzler/eventStudy/eventStudy")`.
+### Installation
+
+**Preferred method:** The latest version of the package can be installed with the command `devtools::install_github("setzler/eventStudy/eventStudy")`.
+
+Installation without internet access: Clone this repo to your personal machine, use the command line approach of `R CMD BUILD eventStudy/` to build the file eventStudy\_0.1.0.tar.gz, move this .tar.gz file to the location without internet access, then install on that location using the command `install.package("eventStudy_0.1.0.tar.gz",repo=NULL)` within an R session. In case you cannot clone and build the repo, we provide a (possibly out of date) version of the .tar.gz file above.
 
 The `ES` command
 ================
@@ -76,18 +82,18 @@ sim_data <- ES_simulate_data(units = 1000)[["observed"]]
 sim_data[]
 ```
 
-    ##       individual year treatment_year    outcome
-    ##    1:          1 1999           2003 0.98167844
-    ##    2:          1 2000           2003 0.57279337
-    ##    3:          1 2001           2003 0.97588704
-    ##    4:          1 2002           2003 0.82146202
-    ##    5:          1 2003           2003 0.08554867
-    ##   ---                                          
-    ## 6996:       1000 2001           2003 0.60283019
-    ## 6997:       1000 2002           2003 0.79329822
-    ## 6998:       1000 2003           2003 0.60895439
-    ## 6999:       1000 2004           2003 0.24397755
-    ## 7000:       1000 2005           2003 0.70081946
+    ##       individual year treatment_year   outcome
+    ##    1:          1 1999           2002 0.7032163
+    ##    2:          1 2000           2002 0.7677275
+    ##    3:          1 2001           2002 0.8839913
+    ##    4:          1 2002           2002 0.2687297
+    ##    5:          1 2003           2002 0.2889234
+    ##   ---                                         
+    ## 6996:       1000 2001           2002 0.5799960
+    ## 6997:       1000 2002           2002 0.4863395
+    ## 6998:       1000 2003           2002 0.4516244
+    ## 6999:       1000 2004           2002 0.4382181
+    ## 7000:       1000 2005           2002 0.7611980
 
 In this data, the treatment is received in the year given by the `treatment_year` variable. The other variables are `individual`, `year`, and `outcome`. We wish to perform an event study to understand the effect of this treatment on this outcome.
 
@@ -114,9 +120,9 @@ results <- ES(long_data=sim_data, outcomevar="outcome", unit_var="individual", c
     ## Warning in as.POSIXlt.POSIXct(x, tz): unknown timezone 'zone/tz/2018i.1.0/
     ## zoneinfo/America/Chicago'
 
-    ## INFO [2019-01-24 00:51:01] Successfully produced a stacked dataset.
-    ## INFO [2019-01-24 00:51:02] Estimated heterogeneous case with OLS.
-    ## INFO [2019-01-24 00:51:02] Estimated homogeneous case with OLS.
+    ## INFO [2019-01-24 01:07:37] Successfully produced a stacked dataset.
+    ## INFO [2019-01-24 01:07:38] Estimated heterogeneous case with OLS.
+    ## INFO [2019-01-24 01:07:38] Estimated homogeneous case with OLS.
 
 Now, we plot the results. First, we plot the treatment and control means. The ES function has constructed the appropriate control group for each treatment group. We can see that it looks much cleaner than in the raw data:
 
