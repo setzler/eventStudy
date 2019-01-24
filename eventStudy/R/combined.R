@@ -2,8 +2,11 @@
 
 #' @export
 ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
-               omitted_event_time= -2, min_control_gap=1, max_control_gap=Inf,
-               control_subset_var=NA, control_subset_event_time=0, fill_zeros=F, vars_to_fill=NULL){
+               omitted_event_time= -2, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
+               control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
+               residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL){
+
+  flog.info("Beginning ES.")
 
   # type checks
   assertDataTable(long_data)
@@ -23,9 +26,13 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     assertCharacter(control_subset_var,len=1)
   }
   assertIntegerish(control_subset_event_time,len=1)
+  assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
-  if(!is.null(vars_to_fill)){
-    assertCharacter(vars_to_fill)
+  assertFlag(residualize_covariates)
+  if(residualize_covariates){
+    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars))){
+      stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
+    }
   }
 
   # check that all of these variables are actually in the data.table, and provide custom error messages.
@@ -40,20 +47,42 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     if(!(control_subset_var %in% names(long_data))){stop(sprintf("Variable control_subset_var='%s' is not in the long_data you provided.",control_subset_var))}
     if(!(long_data[,typeof(get(control_subset_var))]=="logical")){stop(sprintf("Variable control_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var))}
   }
-  if(fill_zeros){
-    for(vv in vars_to_fill){
-      if(!(vv %in% names(long_data))){stop(sprintf("Variable vars_to_fill='%s' is not in the long_data you provided. Let me suggest vars_to_fill='%s'.",vv,outcomevar))}
+  if(residualize_covariates){
+    if(testCharacter(discrete_covars)){
+      for(vv in discrete_covars){
+        if(!(vv %in% names(long_data))){stop(sprintf("Variable discrete_covars='%s' is not in the long_data you provided.",vv))}
+      }
+    }
+    if(testCharacter(cont_covars)){
+      for(vv in cont_covars){
+        if(!(vv %in% names(long_data))){stop(sprintf("Variable cont_covars='%s' is not in the long_data you provided.",vv))}
+      }
     }
   }
 
 
 
+
   # fill with zeros
   if(fill_zeros){
-    long_data <- ES_expand_to_balance(long_data, vars_to_fill = vars_to_fill, unit_var, cal_time_var, onset_time_var)
+    flog.info("Filling in zeros.")
+    long_data <- ES_expand_to_balance(long_data, vars_to_fill = outcomevar, unit_var, cal_time_var, onset_time_var)
+  }
+
+  # linearize pre-trends
+  if(linearize_pretrends){
+    flog.info("Linearizing pre-trends.")
+    long_data <- ES_parallelize_trends(long_data, outcomevar, unit_var, cal_time_var, onset_time_var)
+  }
+
+  if(residualize_covariates){
+    flog.info("Residualizing on covariates.")
+    ES_residualize_covariates(long_data, outcomevar, unit_var, cal_time_var, onset_time_var,
+                              discrete_covars = discrete_covars, cont_covars = cont_covars)
   }
 
   # process data
+  flog.info("Beginning data stacking.")
   ES_data <- ES_clean_data(long_data = long_data, outcomevar = outcomevar,
                            unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                            min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
@@ -71,6 +100,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   # export
   figdata <- rbindlist(list(ES_results_hetero, ES_results_homo, ES_treatcontrol_means), use.names = TRUE, fill=TRUE)
   figdata[is.na(cluster_se), cluster_se := 0]
+
+  flog.info('ES is finished.')
   return(figdata)
 }
 

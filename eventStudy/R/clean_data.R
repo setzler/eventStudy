@@ -243,12 +243,12 @@ ES_parallelize_trends <- function(long_data,
 
   setorderv(input_dt, c(unit_var, cal_time_var))
 
-  flog.info("Residualized out cohort-specific pre-trends using only pre-treatment data.")
+  # flog.info("Residualized out cohort-specific pre-trends using only pre-treatment data.")
 
   return(input_dt)
 }
 
-ES_residualize_time_varying_covar <- function(long_data,
+ES_residualize_covariates <- function(long_data,
                                               outcomevar,
                                               unit_var,
                                               cal_time_var,
@@ -369,7 +369,7 @@ ES_residualize_time_varying_covar <- function(long_data,
 
   setorderv(input_dt, c(unit_var, cal_time_var))
 
-  flog.info("Residualized out contribution of covariates using only pre-treatment data.")
+  # flog.info("Residualized out contribution of covariates using only pre-treatment data.")
 
   return(input_dt)
 }
@@ -408,7 +408,7 @@ ES_expand_to_balance <- function(long_data,
   }
 
 
-  flog.info("Expanded provided data to balanced panel and filled missings with 0 for vars_to_fill.")
+  #flog.info("Expanded provided data to balanced panel and filled missings with 0 for vars_to_fill.")
 
   return(input_dt)
 }
