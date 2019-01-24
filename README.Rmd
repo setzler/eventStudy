@@ -24,7 +24,7 @@ The methods are explained in [our companion Practical Guide to Event Studies](ht
 
 - It maximizes sample size by using a "stacked" approach to match all possible control observations to any given treatment observation at any event time;
 - It allows the estimated treatment effects to vary over time and by treatment cohort. It can also impose a common treatment effect across cohorts (extending results by Abraham & Sun, 2018);
-- It has built-in tools to correct for anticipation (extending results by Fadlon & Nielsen, 2019) and deviations from parallel trends (either using covariate balancing in the spirit of Abadie, 2003, or modeling parametric deviations from parallel trends).
+- It has built-in tools to correct for anticipation (extending results by Fadlon & Nielsen, 2019) and deviations from parallel trends (either using covariate balancing in the spirit of Abadie, 2005, or modeling parametric deviations from parallel trends).
 
 
 ### Installation
@@ -53,11 +53,11 @@ These required arguments simply supply `ES` your data and tell `ES` the names of
 These optional arguments allow you to customize `ES` to deal with issues like anticipation and non-parallel trends:
 
 - `omitted_event_time`: This lets you decide the pre-treatment event time to use as the reference year. It must be an integer that is less than or equal to `-1`. The default is `-2`.
-- `min_control_gap` and `max_control_gap`: `min_control_gap` is the minimum number of time periods ahead that a cohort must receive treatment in order to be included in the control group (e.g., Fadlon & Nielsen, 2018, use `min_control_gap=5`). It must be an integer that is at least `1`. The default is `1`. `max_control_gap` is similar but for the maximum number of time periods ahead  (e.g., Fadlon & Nielsen, 2018, also use `max_control_gap=5`). It must be an integer that is at least as large as `min_control_gap`. The default is `Inf`.
-- `control_subset_var` and `control_subset_event_time`: These variables allow one to require that the control group  satisfies a logical condition at a given event time. `control_subset_var` must be the name of a logical variable in the data (all values of this variable are `TRUE` or `FALSE`) and `control_subset_event_time` is an integer which specifies the event time at which the control group must have a value of `TRUE` on `control_subset_var`. The default is `control_subset_var=NA`, which bypasses this option.
-- `fill_zeros`: `fill_zeros` is a logical indicator (`TRUE` or `FALSE`) which results in the data being filled and the outcome set to zero for all observations on a unit that are missing within the time frame included in the data. 
-- `linearize_pretrends`: `linearize_pretrends` is a logical indicator that, when set to `TRUE`, results in linear pre-trends being fit separately for the treatment and control group during the pre-event years, and then residualized out of both the pre-event and post-event outcomes.
-- `residualize_covariates`: Like `linearize_pretrends`, but it residualizes on provided covariates rather than time. Either `discrete_covars` (discrete covariates) or `cont_covars` (continuous covariates) or both must be specified as `character vectors` of variable names. Discrete covariates will be residualized using fixed effects, while continuous covariates will be residualized linearly.
+- `min_control_gap` and `max_control_gap`: `min_control_gap` is the minimum number of time periods ahead that a cohort must receive treatment in order to be included in the control group (e.g., Fadlon & Nielsen, 2019, use `min_control_gap=5`). It must be an integer that is at least `1`. The default is `1`. `max_control_gap` is similar but for the maximum number of time periods ahead  (e.g., Fadlon & Nielsen, 2019, also use `max_control_gap=5`). It must be an integer that is at least as large as `min_control_gap`. The default is `Inf`.
+- `control_subset_var` and `control_subset_event_time`: These variables allow one to require that the control group  satisfies a logical condition at a given event time. `control_subset_var` must be the name of a logical variable in the data (all values of this variable are `TRUE` or `FALSE`) and `control_subset_event_time` is an integer which specifies the event time at which the control group must have a value of `TRUE` on `control_subset_var`. The default is `control_subset_var=NA`, which bypasses this option. 
+- `fill_zeros`: `fill_zeros` is a logical indicator (`TRUE` or `FALSE`) which results in the data being filled and the outcome set to zero for all observations on a unit that are missing within the time frame included in the data. The default is `FALSE`.
+- `linearize_pretrends`: `linearize_pretrends` is a logical indicator that, when set to `TRUE`, results in linear pre-trends being fit during the pre-event years, and then residualized out of both the pre-event and post-event outcomes. The default is `FALSE`.
+- `residualize_covariates`: Like `linearize_pretrends`, but it residualizes on provided covariates rather than time. Either `discrete_covars` (discrete covariates) or `cont_covars` (continuous covariates) or both must be specified as `character vectors` of variable names. Discrete covariates will be residualized using fixed effects, while continuous covariates will be residualized linearly. The default is `FALSE`.
 
 
 
@@ -185,6 +185,9 @@ results4 <- ES(long_data=sim_data, outcomevar="outcome",
 ```
 
 
+
+
+
 ### Example 5. Residualzing on covariates where some are discrete and some are continuous
 
 Let's add some discrete and continuous covariates to the data:
@@ -234,6 +237,7 @@ results6 <- ES(long_data=sim_data, outcomevar="outcome",
                fill_zeros = TRUE)
 ```
 
+Note: This cannot be combined with residualizing on covariates, since ES would need to know how to fill in the covariates during the years that observations are missing.
 
 
 
