@@ -2860,8 +2860,11 @@ Code
 \begin_layout Standard
 We wrote a software package in R, called eventStudy, which makes everything
  here extremely easy.
- See https://github.com/setzler/eventStudy for information on how to install
- and use the package.
+ For information on how to install and use the package, see:
+\end_layout
+
+\begin_layout Quote
+https://github.com/setzler/eventStudy 
 \end_layout
 
 \begin_layout Standard
