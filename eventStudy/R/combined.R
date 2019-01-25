@@ -69,6 +69,11 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     long_data <- ES_expand_to_balance(long_data, vars_to_fill = outcomevar, unit_var, cal_time_var, onset_time_var)
   }
 
+  # Check that there exist cohorts with observations at omitted_event_time
+  if(is.infinite(suppressWarnings(min(input_dt[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])))){
+    stop(sprintf("Variable onset_time_var='%s' has no treated groups with observations at pre-treatment event time %s.",onset_time_var, omitted_event_time))
+  }
+
   # linearize pre-trends
   if(linearize_pretrends){
     flog.info("Linearizing pre-trends.")
