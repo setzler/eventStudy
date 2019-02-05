@@ -70,7 +70,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
 
   # Check that there exist cohorts with observations at omitted_event_time
-  if(is.infinite(suppressWarnings(min(input_dt[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])))){
+  if(is.infinite(suppressWarnings(min(long_data[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])))){
     stop(sprintf("Variable onset_time_var='%s' has no treated groups with observations at pre-treatment event time %s.",onset_time_var, omitted_event_time))
   }
 
