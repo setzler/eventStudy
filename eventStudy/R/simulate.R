@@ -16,7 +16,8 @@ ES_simulate_data <- function(units = 1e4,
                              control_subset = FALSE,
                              time_vary_confounds_low_dim = FALSE,
                              time_vary_confounds_high_dim = FALSE,
-                             time_vary_confounds_cont = FALSE) {
+                             time_vary_confounds_cont = FALSE,
+                             add_never_treated = FALSE) {
 
   Units <- 1:units
   Times <- min_cal_time:max_cal_time
@@ -39,10 +40,27 @@ ES_simulate_data <- function(units = 1e4,
     sim_data[recode > 0.50, win_yr := 2003]
   }
 
+  if(add_never_treated == TRUE){
+
+    # $@$ Randomly make some individuals never-treated with an onset_time_var of max() + 1; will change to NA upon concluding
+    sim_data[, recode := runif(1, min = 0, max = 1), list(tin)]
+    sim_data[recode < 0.10, win_yr := NA]
+
+    never_treated <- max( max(sim_data$win_yr, na.rm = TRUE), max(sim_data$tax_yr, na.rm = TRUE))  + 1
+    sim_data[is.na(win_yr), win_yr := never_treated]
+
+  }
+
   # Different initial condition by cohort (just to generate level differences)
   cohort_fes <- data.table(win_yr = sort(unique(sim_data$win_yr)), alpha_e = runif(uniqueN(sim_data$win_yr), min = 0.6, max = 0.9))
   sim_data <- merge(sim_data, cohort_fes, by = "win_yr")
   gc()
+
+  if(add_never_treated == TRUE){
+    # change back to NA
+    sim_data[win_yr == never_treated, win_yr := NA]
+    cohort_fes[win_yr == never_treated, win_yr := NA]
+  }
 
   # Generic (but parallel) trend
   tax_yr_fes <- data.table(tax_yr = sort(unique(sim_data$tax_yr)), delta_t = runif(uniqueN(sim_data$tax_yr), min = -0.1, max = 0.1))
@@ -73,9 +91,10 @@ ES_simulate_data <- function(units = 1e4,
     params <- merge(params, cohort_specific_post_quad, by = "win_yr", all = TRUE)
     params[, win_yr := as.character(win_yr)]
 
-    sim_data <- merge(sim_data, cohort_specific_te_0, by = "win_yr")
-    sim_data <- merge(sim_data, cohort_specific_post_linear, by = "win_yr")
-    sim_data <- merge(sim_data, cohort_specific_post_quad, by = "win_yr")
+    sim_data <- merge(sim_data, cohort_specific_te_0, by = "win_yr", all.x = TRUE)
+    sim_data <- merge(sim_data, cohort_specific_post_linear, by = "win_yr", all.x = TRUE)
+    sim_data <- merge(sim_data, cohort_specific_post_quad, by = "win_yr", all.x = TRUE)
+    # ^ Need "all.x = TRUE" above so as not to drop the never-treated (win_yr == NA) cohort from sim_data
     gc()
   } else {
 
@@ -98,8 +117,9 @@ ES_simulate_data <- function(units = 1e4,
       win_yr = sort(unique(sim_data$win_yr)),
       cal_linear_trend = (1:6 - 3.5) / 100
     )
-    sim_data <- merge(sim_data, cohort_specific_cal_time_trend, by = "win_yr")
-    sim_data[, delta_t := delta_t + (tax_yr - min_cal_time) * cal_linear_trend]
+    sim_data <- merge(sim_data, cohort_specific_cal_time_trend, by = "win_yr", all.x = TRUE)
+    # ^ Need "all.x = TRUE" above so as not to drop the never-treated (win_yr == NA) cohort from sim_data
+    sim_data[!is.na(win_yr), delta_t := delta_t + (tax_yr - min_cal_time) * cal_linear_trend]
     gc()
   }
 
@@ -126,7 +146,8 @@ ES_simulate_data <- function(units = 1e4,
       antic_2 = (-3:2) / 10
     )
 
-    sim_data <- merge(sim_data, cohort_specific_antic_params, by = "win_yr")
+    sim_data <- merge(sim_data, cohort_specific_antic_params, by = "win_yr", all.x = TRUE)
+    # ^ Need "all.x = TRUE" above so as not to drop the never-treated (win_yr == NA) cohort from sim_data
     cohort_specific_antic_params[, win_yr := as.character(win_yr)]
     gc()
 
@@ -148,11 +169,13 @@ ES_simulate_data <- function(units = 1e4,
       pr_subset = (7:2 + 0.5)/10
     )
 
-    sim_data <- merge(sim_data, cohort_specific_subset_propensity, by = "win_yr")
+    sim_data <- merge(sim_data, cohort_specific_subset_propensity, by = "win_yr", all.x = TRUE)
+    # ^ Need "all.x = TRUE" above so as not to drop the never-treated (win_yr == NA) cohort from sim_data
     gc()
 
     sim_data[, subset_index := runif(1, min = 0, max = 1), list(tin)]
-    sim_data[, subset_var := as.integer(subset_index <= pr_subset)]
+    sim_data[!is.na(win_yr), subset_var := as.integer(subset_index <= pr_subset)]
+    sim_data[is.na(win_yr), subset_var := as.integer(subset_index <= 0.5)]
 
     tax_yr_fes_subset0 <- data.table(tax_yr = sort(unique(sim_data$tax_yr)),
                                      subset_delta_t = sort(runif(uniqueN(sim_data$tax_yr), min = 0.10, max = 0.20)),
@@ -181,6 +204,8 @@ ES_simulate_data <- function(units = 1e4,
     sim_data[win_yr == 2004, time_vary_var := as.integer(runif(1) <= 0.30), list(tin)]
     sim_data[win_yr == 2005, time_vary_var := as.integer(runif(1) <= 0.25), list(tin)]
     sim_data[win_yr == 2006, time_vary_var := as.integer(runif(1) <= 0.2), list(tin)]
+    sim_data[is.na(win_year), time_vary_var := as.integer(runif(1) <= 0.325), list(tin)]
+
 
     # Earlier cohorts age more in the post-treatment period on average
     sim_data[time_vary_var == 0 & tax_yr >= win_yr & win_yr == 2001, time_vary_var := as.integer(runif(1) <= 0.90), list(tin)]
@@ -196,7 +221,7 @@ ES_simulate_data <- function(units = 1e4,
     gc()
   }
 
-  if(time_vary_confounds_high_dim==TRUE){
+  if(time_vary_confounds_high_dim==TRUE & add_never_treated==FALSE){
 
     # Age distribution at event time the same across cohorts
     ages = 18:75
@@ -245,11 +270,11 @@ ES_simulate_data <- function(units = 1e4,
   sim_data[, epsilon := rnorm(dim(sim_data)[1], mean = 0, sd = epsilon_sd)]
 
   sim_data[, outcome := alpha_e + delta_t + epsilon]
-  sim_data[event_time >= 0, outcome := outcome + te_0 + (event_time * linear_load) + ((event_time)^2 * quad_load)]
+  sim_data[event_time >= 0 & !is.na(win_yr), outcome := outcome + te_0 + (event_time * linear_load) + ((event_time)^2 * quad_load)]
   if(homogeneous_ATT == T & anticipation == T & cohort_specific_anticipation == F){
-    sim_data[event_time < 0, outcome := outcome + (event_time==(-2))*antic_params[1] + (event_time==(-1))*antic_params[2]]
+    sim_data[event_time < 0 & !is.na(win_yr), outcome := outcome + (event_time==(-2))*antic_params[1] + (event_time==(-1))*antic_params[2]]
   } else if(homogeneous_ATT == T & anticipation == T & cohort_specific_anticipation == T){
-    sim_data[event_time < 0, outcome := outcome + (event_time==(-2))*antic_1 + (event_time==(-1))*antic_2]
+    sim_data[event_time < 0 & !is.na(win_yr), outcome := outcome + (event_time==(-2))*antic_1 + (event_time==(-1))*antic_2]
   }
 
   output <- list()

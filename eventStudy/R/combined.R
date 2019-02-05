@@ -4,7 +4,7 @@
 ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                omitted_event_time= -2, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
                control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
-               residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL){
+               residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none'){
 
   flog.info("Beginning ES.")
 
@@ -60,8 +60,27 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     }
   }
 
+  # check that user correctly input what to do with never treated
+  if(!(never_treat_action %in% c('none', 'exclude', 'keep', 'only'))){
+    stop(sprintf("never_treat_action='%s' is not among allowed values (c('none', 'exclude', 'keep', 'only')).", never_treat_action))
+    }
+  if(never_treat_action=='none' & dim(long_data[is.na(get(onset_time_var))])[1] > 0){
+    stop(sprintf("never_treat_action='%s' but some units have %s=NA. Please edit supplied long_data or consider another option for never_treat_action.", never_treat_action, onset_time_var))
+  }
+  if(never_treat_action!='none' & dim(long_data[is.na(get(onset_time_var))])[1] == 0){
+    stop(sprintf("never_treat_action='%s' but no units have %s=NA. Let me suggest never_treat_action='none'.", never_treat_action, onset_time_var))
+  }
 
-
+  # edit long_data in line with supplied never_treat_action option
+  if(never_treat_action == 'exclude'){
+    never_treat_val = NA
+    long_data <- long_data[!is.na(get(onset_time_var))]
+    gc()
+  } else if(never_treat_action %in% c('keep', 'only')){
+    # assign the never-treated a unique onset time that ensures they are always part of the control group
+    never_treat_val <- max( max(long_data[[onset_time_var]], na.rm = TRUE), max(long_data[[cal_time_var]], na.rm = TRUE))  + 1
+    long_data[is.na(get(onset_time_var)), (onset_time_var) := never_treat_val]
+  }
 
   # fill with zeros
   if(fill_zeros){
@@ -74,7 +93,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     stop(sprintf("Variable onset_time_var='%s' has no treated groups with observations at pre-treatment event time %s.",onset_time_var, omitted_event_time))
   }
 
-  # linearize pre-trends
+  # linearize pre-trends; never-treated will be treated as a single cohort
   if(linearize_pretrends){
     flog.info("Linearizing pre-trends.")
     long_data <- ES_parallelize_trends(long_data, outcomevar, unit_var, cal_time_var, onset_time_var)
@@ -91,7 +110,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   ES_data <- ES_clean_data(long_data = long_data, outcomevar = outcomevar,
                            unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                            min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
-                           control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time)
+                           control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
+                           never_treat_action = never_treat_action, never_treat_val = never_treat_val)
 
   # collect ATT estimates
   ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data, outcomevar=outcomevar, onset_time_var = onset_time_var, cluster_vars = cluster_vars, homogeneous_ATT = FALSE)

@@ -16,7 +16,9 @@ ES_clean_data <- function(long_data,
                           ipw_model = "linear",
                           ipw_covars_discrete = NA,
                           ipw_covars_cont = NA,
-                          ipw_composition_change = FALSE) {
+                          ipw_composition_change = FALSE,
+                          never_treat_action,
+                          never_treat_val = NA) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
@@ -78,6 +80,12 @@ ES_clean_data <- function(long_data,
                                               na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont)),
                                               with = FALSE
                                               ]
+
+    if(never_treat_action == 'only'){
+      # will only form control groups using the never-treated units (so excluding the not-yet treated)
+      possible_treated_control[[2]] <- possible_treated_control[[2]][get(onset_time_var) == never_treat_val]
+    }
+
     gc()
     possible_treated_control[[2]][, ref_onset_time := e]
     possible_treated_control[[2]][, treated := 0]
@@ -195,6 +203,10 @@ ES_clean_data <- function(long_data,
     flog.info("Estimated three seprate propensity score models per (ref_onset_time, CATT) with Treated-Post as the target population.")
   } else if(ipw == TRUE & ipw_composition_change == FALSE){
     flog.info("Estimated one propensity score model per (ref_onset_time, CATT) with Treated as the target population.")
+  }
+
+  if(never_treat_action == 'only'){
+    rm(never_treat_val)
   }
 
   return(stack_across_cohorts_balanced_treated_control)
