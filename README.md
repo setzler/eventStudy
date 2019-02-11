@@ -85,18 +85,18 @@ sim_data <- ES_simulate_data(units = 1000)[["observed"]]
 sim_data[]
 ```
 
-    ##       individual year treatment_year     outcome
-    ##    1:          1 1999           2003  0.74214958
-    ##    2:          1 2000           2003  0.46792569
-    ##    3:          1 2001           2003  0.74000928
-    ##    4:          1 2002           2003  0.86994210
-    ##    5:          1 2003           2003 -0.07740194
-    ##   ---                                           
-    ## 6996:       1000 2001           2002  0.36290691
-    ## 6997:       1000 2002           2002  0.70696522
-    ## 6998:       1000 2003           2002  0.33518744
-    ## 6999:       1000 2004           2002  0.77332148
-    ## 7000:       1000 2005           2002  0.25726866
+    ##       individual year treatment_year   outcome
+    ##    1:          1 1999           2005 0.7846282
+    ##    2:          1 2000           2005 0.4487163
+    ##    3:          1 2001           2005 0.7453717
+    ##    4:          1 2002           2005 0.8915385
+    ##    5:          1 2003           2005 0.4434582
+    ##   ---                                         
+    ## 6996:       1000 2001           2003 0.9327653
+    ## 6997:       1000 2002           2003 0.5755903
+    ## 6998:       1000 2003           2003 0.6511915
+    ## 6999:       1000 2004           2003 0.8061300
+    ## 7000:       1000 2005           2003 0.4857922
 
 In this data, the treatment is received in the year given by the `treatment_year` variable. The other variables are `individual`, `year`, and `outcome`. We wish to perform an event study to understand the effect of this treatment on this outcome.
 
@@ -110,7 +110,7 @@ ggplot(data=cohort_means,aes(x=year,y=outcome,colour=factor(treatment_year))) + 
   labs(x = "Year", y = "Outcome", color = "Treatment") + theme_bw(base_size=16)
 ```
 
-![](README_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-4-1.png)
+![](README_files/figure-markdown_github/unnamed-chunk-4-1.png)
 
 (Note: even though the data is drawn from the model with perfect control groups, the control groups do not look great visually!)
 
@@ -125,29 +125,12 @@ results <- ES(long_data=sim_data, outcomevar="outcome",
               onset_time_var="treatment_year", cluster_vars="individual")
 ```
 
-    ## Warning in as.POSIXlt.POSIXct(x, tz): unknown timezone 'zone/tz/2018i.1.0/
-    ## zoneinfo/America/Chicago'
-
-    ## INFO [2019-02-11 19:17:48] Beginning ES.
-    ## INFO [2019-02-11 19:17:48] Beginning data stacking.
-    ## INFO [2019-02-11 19:17:57] Successfully produced a stacked dataset with 26,966 rows.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:17:58] Estimated heterogeneous case with OLS.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:17:58] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 19:17:58] ES is finished.
+    ## INFO [2019-02-11 13:37:47] Beginning ES.
+    ## INFO [2019-02-11 13:37:47] Beginning data stacking.
+    ## INFO [2019-02-11 13:38:05] Successfully produced a stacked dataset with 28,180 rows.
+    ## INFO [2019-02-11 13:38:06] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 13:38:06] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 13:38:06] ES is finished.
 
 ### Example 2. Estimation using only control cohorts that receive treatment at certain times in the future
 
@@ -161,9 +144,9 @@ results2 <- ES(long_data=sim_data, outcomevar="outcome",
                min_control_gap = 3, max_control_gap = 5, anticipation = 1)
 ```
 
-    ## INFO [2019-02-11 19:17:58] Beginning ES.
-    ## INFO [2019-02-11 19:17:58] Beginning data stacking.
-    ## INFO [2019-02-11 19:18:04] Successfully produced a stacked dataset with 11,830 rows.
+    ## INFO [2019-02-11 13:38:06] Beginning ES.
+    ## INFO [2019-02-11 13:38:06] Beginning data stacking.
+    ## INFO [2019-02-11 13:38:18] Successfully produced a stacked dataset with 13,807 rows.
 
     ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
     ## rank-deficient or indefinite
@@ -171,7 +154,7 @@ results2 <- ES(long_data=sim_data, outcomevar="outcome",
     ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
     ## rank-deficient or indefinite
 
-    ## INFO [2019-02-11 19:18:04] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 13:38:19] Estimated heterogeneous case with OLS.
 
     ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
     ## rank-deficient or indefinite
@@ -179,8 +162,8 @@ results2 <- ES(long_data=sim_data, outcomevar="outcome",
     ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
     ## rank-deficient or indefinite
 
-    ## INFO [2019-02-11 19:18:05] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 19:18:05] ES is finished.
+    ## INFO [2019-02-11 13:38:19] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 13:38:19] ES is finished.
 
 ### Example 3. Estimation using only never-winners as the control group
 
@@ -200,26 +183,12 @@ results3 <- ES(long_data=sim_data2, outcomevar="outcome",
                never_treat_action = "only")
 ```
 
-    ## INFO [2019-02-11 19:18:05] Beginning ES.
-    ## INFO [2019-02-11 19:18:05] Beginning data stacking.
-    ## INFO [2019-02-11 19:18:15] Successfully produced a stacked dataset with 33,442 rows.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:15] Estimated heterogeneous case with OLS.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:15] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 19:18:15] ES is finished.
+    ## INFO [2019-02-11 13:38:19] Beginning ES.
+    ## INFO [2019-02-11 13:38:19] Beginning data stacking.
+    ## INFO [2019-02-11 13:38:39] Successfully produced a stacked dataset with 35,788 rows.
+    ## INFO [2019-02-11 13:38:40] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 13:38:41] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 13:38:41] ES is finished.
 
 ### Example 4. Estimation using only control cohorts that satisfy a condition at an event time
 
@@ -240,26 +209,12 @@ results4 <- ES(long_data=sim_data, outcomevar="outcome",
                control_subset_var="valid_control", control_subset_event_time=-1)
 ```
 
-    ## INFO [2019-02-11 19:18:15] Beginning ES.
-    ## INFO [2019-02-11 19:18:15] Beginning data stacking.
-    ## INFO [2019-02-11 19:18:26] Successfully produced a stacked dataset with 18,070 rows.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:26] Estimated heterogeneous case with OLS.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:26] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 19:18:26] ES is finished.
+    ## INFO [2019-02-11 13:38:41] Beginning ES.
+    ## INFO [2019-02-11 13:38:41] Beginning data stacking.
+    ## INFO [2019-02-11 13:39:00] Successfully produced a stacked dataset with 20,020 rows.
+    ## INFO [2019-02-11 13:39:01] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 13:39:02] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 13:39:02] ES is finished.
 
 ### Example 5. Removing linear deviations from parallel trends
 
@@ -273,27 +228,13 @@ results5 <- ES(long_data=sim_data, outcomevar="outcome",
                linearize_pretrends = TRUE)
 ```
 
-    ## INFO [2019-02-11 19:18:26] Beginning ES.
-    ## INFO [2019-02-11 19:18:26] Linearizing pre-trends.
-    ## INFO [2019-02-11 19:18:27] Beginning data stacking.
-    ## INFO [2019-02-11 19:18:37] Successfully produced a stacked dataset with 26,966 rows.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:37] Estimated heterogeneous case with OLS.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:37] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 19:18:37] ES is finished.
+    ## INFO [2019-02-11 13:39:02] Beginning ES.
+    ## INFO [2019-02-11 13:39:02] Linearizing pre-trends.
+    ## INFO [2019-02-11 13:39:02] Beginning data stacking.
+    ## INFO [2019-02-11 13:39:21] Successfully produced a stacked dataset with 28,180 rows.
+    ## INFO [2019-02-11 13:39:21] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 13:39:22] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 13:39:22] ES is finished.
 
 ### Example 6. Residualzing on covariates where some are discrete and some are continuous
 
@@ -321,27 +262,13 @@ results6 <- ES(long_data=sim_data, outcomevar="outcome",
                cont_covars = c('cont_covar1','cont_covar2'))
 ```
 
-    ## INFO [2019-02-11 19:18:37] Beginning ES.
-    ## INFO [2019-02-11 19:18:37] Residualizing on covariates.
-    ## INFO [2019-02-11 19:18:38] Beginning data stacking.
-    ## INFO [2019-02-11 19:18:47] Successfully produced a stacked dataset with 26,966 rows.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:48] Estimated heterogeneous case with OLS.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:48] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 19:18:48] ES is finished.
+    ## INFO [2019-02-11 13:39:22] Beginning ES.
+    ## INFO [2019-02-11 13:39:22] Residualizing on covariates.
+    ## INFO [2019-02-11 13:39:22] Beginning data stacking.
+    ## INFO [2019-02-11 13:39:43] Successfully produced a stacked dataset with 28,180 rows.
+    ## INFO [2019-02-11 13:39:43] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 13:39:44] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 13:39:44] ES is finished.
 
 ### Example 7. Filling in missing rows with zeros.
 
@@ -361,27 +288,13 @@ results7 <- ES(long_data=sim_data, outcomevar="outcome",
                fill_zeros = TRUE)
 ```
 
-    ## INFO [2019-02-11 19:18:48] Beginning ES.
-    ## INFO [2019-02-11 19:18:48] Filling in zeros.
-    ## INFO [2019-02-11 19:18:48] Beginning data stacking.
-    ## INFO [2019-02-11 19:18:58] Successfully produced a stacked dataset with 26,966 rows.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:59] Estimated heterogeneous case with OLS.
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## Warning in chol.default(mat, pivot = TRUE, tol = tol): the matrix is either
-    ## rank-deficient or indefinite
-
-    ## INFO [2019-02-11 19:18:59] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 19:18:59] ES is finished.
+    ## INFO [2019-02-11 13:39:44] Beginning ES.
+    ## INFO [2019-02-11 13:39:44] Filling in zeros.
+    ## INFO [2019-02-11 13:39:44] Beginning data stacking.
+    ## INFO [2019-02-11 13:40:04] Successfully produced a stacked dataset with 28,180 rows.
+    ## INFO [2019-02-11 13:40:04] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 13:40:05] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 13:40:05] ES is finished.
 
 Note: This cannot be combined with residualizing on covariates, since ES would need to know how to fill in the covariates during the years that observations are missing.
 
@@ -393,7 +306,7 @@ Now, we plot the results. First, we plot the treatment and control means. `ES` h
 ES_plot_levels(results, lower_event = -3, upper_event = 5) + ylab("Mean of the Outcome")
 ```
 
-![](README_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-16-1.png)
+![](README_files/figure-markdown_github/unnamed-chunk-16-1.png)
 
 Note that, becuase `omitted_event_time=-2`, the treatment and control group means must both be zero at event time -2, for each treatment-control pair.
 
@@ -403,11 +316,7 @@ Next, we plot the treatment effects, comparing the cohort-specific effects to th
 ES_plot_ATTs(results, lower_event = -3, upper_event = 5) + ylab("ATT Estimate (95% CI)")
 ```
 
-    ## Warning: Removed 14 rows containing missing values (geom_point).
-
-    ## Warning: Removed 14 rows containing missing values (geom_errorbar).
-
-![](README_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-17-1.png)
+![](README_files/figure-markdown_github/unnamed-chunk-17-1.png)
 
 Finally, if we only care about the estimates under the homogeneity assumption, we can show these as follows:
 
@@ -416,8 +325,4 @@ ES_plot_ATTs(results, lower_event = -3, upper_event = 5, homogeneous_ATT = TRUE)
   ylab("ATT Estimate (95% CI)")
 ```
 
-    ## Warning: Removed 4 rows containing missing values (geom_point).
-
-    ## Warning: Removed 4 rows containing missing values (geom_errorbar).
-
-![](README_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-18-1.png)
+![](README_files/figure-markdown_github/unnamed-chunk-18-1.png)
