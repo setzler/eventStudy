@@ -197,7 +197,9 @@ ES_clean_data <- function(long_data,
     gc()
   }
 
-  flog.info("Successfully produced a stacked dataset.")
+  flog.info(sprintf("Successfully produced a stacked dataset with %s rows.",
+                    format(dim(stack_across_cohorts_balanced_treated_control)[1], scientific = FALSE, big.mark = ","))
+            )
 
   if(ipw == TRUE & ipw_composition_change == TRUE){
     flog.info("Estimated three seprate propensity score models per (ref_onset_time, CATT) with Treated-Post as the target population.")

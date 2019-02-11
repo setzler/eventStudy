@@ -5,7 +5,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                omitted_event_time= -2, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
                control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
                residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
-               only_homog_ATTs = FALSE, num_cores = 1){
+               homogeneous_ATT = FALSE, num_cores = 1){
 
   flog.info("Beginning ES.")
 
@@ -35,7 +35,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
     }
   }
-  assertFlag(only_homog_ATTs)
+  assertFlag(homogeneous_ATT)
   assertIntegerish(num_cores,len=1)
 
   # check that all of these variables are actually in the data.table, and provide custom error messages.
@@ -122,8 +122,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val)
 
   # collect ATT estimates
-  if(only_homog_ATTs == FALSE){
-    ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data, outcomevar=outcomevar, onset_time_var = onset_time_var, cluster_vars = cluster_vars, homogeneous_ATT = FALSE)
+  if(homogeneous_ATT == FALSE){
+    ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data, outcomevar=outcomevar, onset_time_var = onset_time_var, cluster_vars = cluster_vars, homogeneous_ATT = homogeneous_ATT)
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
     ES_results_hetero = NULL
@@ -143,7 +143,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 }
 
 #' @export
-ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor = 1.96, homogeneous_only = FALSE){
+ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor = 1.96, homogeneous_ATT = FALSE){
 
   figdata <- figdata[rn %in% c("att","catt")]
   figdata[, ref_event_time := as.numeric(ref_event_time)]
@@ -153,7 +153,7 @@ ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor =
   jitter_scale <- figdata[,length(unique(jitter))]
   figdata[, jitter_event_time := ref_event_time + (jitter - jitter_center) / jitter_scale]
 
-  if(homogeneous_only){
+  if(homogeneous_ATT){
     fig <- ggplot(aes( x = ref_event_time, y = estimate), data = figdata[ref_onset_time=="Pooled"]) +
       geom_point() + theme_bw(base_size = 16) +
       geom_errorbar(aes(ymin = estimate - ci_factor * cluster_se, ymax = estimate + ci_factor * cluster_se)) +
