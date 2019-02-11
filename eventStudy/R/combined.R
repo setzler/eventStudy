@@ -4,7 +4,8 @@
 ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                omitted_event_time= -2, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
                control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
-               residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none'){
+               residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
+               only_homog_ATTs = FALSE, num_cores = 1){
 
   flog.info("Beginning ES.")
 
@@ -34,6 +35,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
     }
   }
+  assertFlag(only_homog_ATTs)
+  assertIntegerish(num_cores,len=1)
 
   # check that all of these variables are actually in the data.table, and provide custom error messages.
   if(!(outcomevar %in% names(long_data))){stop(sprintf("Variable outcomevar='%s' is not in the long_data you provided.",outcomevar))}
@@ -70,6 +73,11 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   if(never_treat_action!='none' & dim(long_data[is.na(get(onset_time_var))])[1] == 0){
     stop(sprintf("never_treat_action='%s' but no units have %s=NA. Let me suggest never_treat_action='none'.", never_treat_action, onset_time_var))
   }
+
+  # warning if supplied num_cores exceeds detectCores() - 1
+  # not a perfect test (even as an upper bound) as results of detectCores() may be OS-dependent, do not respect cluster allocation limits, etc.
+  # see help for detectCores() and mc.cores() for more information
+  if(num_cores > (parallel::detectCores() - 1)){warning(sprintf("Supplied num_cores='%s'; this exceeds typical system limits and may cause issues.", num_cores))}
 
   # edit long_data in line with supplied never_treat_action option
   if(never_treat_action == 'exclude'){
@@ -114,9 +122,13 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val)
 
   # collect ATT estimates
-  ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data, outcomevar=outcomevar, onset_time_var = onset_time_var, cluster_vars = cluster_vars, homogeneous_ATT = FALSE)
+  if(only_homog_ATTs == FALSE){
+    ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data, outcomevar=outcomevar, onset_time_var = onset_time_var, cluster_vars = cluster_vars, homogeneous_ATT = FALSE)
+    setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+  } else{
+    ES_results_hetero = NULL
+  }
   ES_results_homo <- ES_estimate_ATT(ES_data = ES_data, outcomevar=outcomevar, onset_time_var = onset_time_var, cluster_vars = cluster_vars, homogeneous_ATT = TRUE)
-  setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect levels by treatment/control
