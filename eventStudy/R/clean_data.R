@@ -12,7 +12,7 @@ ES_clean_data <- function(long_data,
                           treated_subset_event_time=NA,
                           control_subset_var=NA,
                           control_subset_event_time=NA,
-                          never_treat_action,
+                          never_treat_action = 'none',
                           never_treat_val = NA) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
@@ -148,7 +148,7 @@ ES_clean_data <- function(long_data,
     balanced_treated_control <- na.omit(balanced_treated_control)
     gc()
 
-    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, pr, weight, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
+    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
     gc()
 
     balanced_treated_control <- NULL
