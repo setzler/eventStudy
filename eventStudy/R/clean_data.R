@@ -107,7 +107,7 @@ ES_clean_data <- function(long_data,
     max_control_cohort <- max(possible_treated_control[[onset_time_var]])
     possible_treated_control <- possible_treated_control[(treated == 1)  | ((treated == 0) & (get(cal_time_var) < get(onset_time_var) - anticipation))]
 
-    max_control_year <- possible_treated_control[treated == 0, max(cal_time_var)]
+    max_control_year <- possible_treated_control[treated == 0, max(get(cal_time_var))]
     possible_treated_control <- possible_treated_control[get(cal_time_var) <= max_control_year]
 
     gc()
