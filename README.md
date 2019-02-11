@@ -85,18 +85,18 @@ sim_data <- ES_simulate_data(units = 1000)[["observed"]]
 sim_data[]
 ```
 
-    ##       individual year treatment_year     outcome
-    ##    1:          1 1999           2005 0.811351216
-    ##    2:          1 2000           2005 1.095756705
-    ##    3:          1 2001           2005 0.870474806
-    ##    4:          1 2002           2005 0.829629576
-    ##    5:          1 2003           2005 0.723766119
-    ##   ---                                           
-    ## 6996:       1000 2001           2003 0.677456779
-    ## 6997:       1000 2002           2003 0.910380468
-    ## 6998:       1000 2003           2003 0.620562946
-    ## 6999:       1000 2004           2003 0.008933491
-    ## 7000:       1000 2005           2003 0.495212029
+    ##       individual year treatment_year   outcome
+    ##    1:          1 1999           2003 0.8141879
+    ##    2:          1 2000           2003 0.8703408
+    ##    3:          1 2001           2003 0.7651807
+    ##    4:          1 2002           2003 0.9349418
+    ##    5:          1 2003           2003 0.4439295
+    ##   ---                                         
+    ## 6996:       1000 2001           2003 1.0030966
+    ## 6997:       1000 2002           2003 0.7616094
+    ## 6998:       1000 2003           2003 0.8115637
+    ## 6999:       1000 2004           2003 0.5377100
+    ## 7000:       1000 2005           2003 0.4799415
 
 In this data, the treatment is received in the year given by the `treatment_year` variable. The other variables are `individual`, `year`, and `outcome`. We wish to perform an event study to understand the effect of this treatment on this outcome.
 
@@ -125,12 +125,12 @@ results <- ES(long_data=sim_data, outcomevar="outcome",
               onset_time_var="treatment_year", cluster_vars="individual")
 ```
 
-    ## INFO [2019-02-11 14:04:44] Beginning ES.
-    ## INFO [2019-02-11 14:04:44] Beginning data stacking.
-    ## INFO [2019-02-11 14:05:03] Successfully produced a stacked dataset with 28,928 rows.
-    ## INFO [2019-02-11 14:05:04] Estimated heterogeneous case with OLS.
-    ## INFO [2019-02-11 14:05:04] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 14:05:04] ES is finished.
+    ## INFO [2019-02-11 14:27:24] Beginning ES.
+    ## INFO [2019-02-11 14:27:24] Beginning data stacking.
+    ## INFO [2019-02-11 14:27:43] Successfully produced a stacked dataset with 27,992 rows.
+    ## INFO [2019-02-11 14:27:44] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 14:27:44] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 14:27:44] ES is finished.
 
 ### Example 2. Estimation using only control cohorts that receive treatment at certain times in the future
 
@@ -144,12 +144,12 @@ results2 <- ES(long_data=sim_data, outcomevar="outcome",
                min_control_gap = 3, max_control_gap = 5, anticipation = 1)
 ```
 
-    ## INFO [2019-02-11 14:05:04] Beginning ES.
-    ## INFO [2019-02-11 14:05:04] Beginning data stacking.
-    ## INFO [2019-02-11 14:05:15] Successfully produced a stacked dataset with 11,967 rows.
-    ## INFO [2019-02-11 14:05:15] Estimated heterogeneous case with OLS.
-    ## INFO [2019-02-11 14:05:15] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 14:05:15] ES is finished.
+    ## INFO [2019-02-11 14:27:44] Beginning ES.
+    ## INFO [2019-02-11 14:27:44] Beginning data stacking.
+    ## INFO [2019-02-11 14:27:54] Successfully produced a stacked dataset with 11,834 rows.
+    ## INFO [2019-02-11 14:27:55] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 14:27:55] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 14:27:55] ES is finished.
 
 ### Example 3. Estimation using only never-winners as the control group
 
@@ -158,7 +158,10 @@ Let's generate some never-winners by re-coding some of the onset times as missin
 ``` r
 # coding some observations as never-winners
 sim_data2 <- copy(sim_data)
-sim_data2[runif(nrow(sim_data)) < .5, treatment_year := NA]
+unit_var = "individual"
+onset_time_var = "treatment_year"
+sim_data2[, recode := runif(1, min = 0, max = 1), list(get(unit_var))]
+sim_data2[recode < 0.10, (onset_time_var) := NA]
 ```
 
 ``` r
@@ -169,12 +172,12 @@ results3 <- ES(long_data=sim_data2, outcomevar="outcome",
                never_treat_action = "only")
 ```
 
-    ## INFO [2019-02-11 14:05:16] Beginning ES.
-    ## INFO [2019-02-11 14:05:16] Beginning data stacking.
-    ## INFO [2019-02-11 14:05:35] Successfully produced a stacked dataset with 35,595 rows.
-    ## INFO [2019-02-11 14:05:36] Estimated heterogeneous case with OLS.
-    ## INFO [2019-02-11 14:05:36] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 14:05:36] ES is finished.
+    ## INFO [2019-02-11 14:27:55] Beginning ES.
+    ## INFO [2019-02-11 14:27:55] Beginning data stacking.
+    ## INFO [2019-02-11 14:28:15] Successfully produced a stacked dataset with 17,148 rows.
+    ## INFO [2019-02-11 14:28:15] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 14:28:16] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 14:28:16] ES is finished.
 
 ### Example 4. Estimation using only control cohorts that satisfy a condition at an event time
 
@@ -195,12 +198,12 @@ results4 <- ES(long_data=sim_data, outcomevar="outcome",
                control_subset_var="valid_control", control_subset_event_time=-1)
 ```
 
-    ## INFO [2019-02-11 14:05:36] Beginning ES.
-    ## INFO [2019-02-11 14:05:36] Beginning data stacking.
-    ## INFO [2019-02-11 14:05:56] Successfully produced a stacked dataset with 19,600 rows.
-    ## INFO [2019-02-11 14:05:57] Estimated heterogeneous case with OLS.
-    ## INFO [2019-02-11 14:05:57] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 14:05:57] ES is finished.
+    ## INFO [2019-02-11 14:28:16] Beginning ES.
+    ## INFO [2019-02-11 14:28:16] Beginning data stacking.
+    ## INFO [2019-02-11 14:28:36] Successfully produced a stacked dataset with 19,478 rows.
+    ## INFO [2019-02-11 14:28:36] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 14:28:37] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 14:28:37] ES is finished.
 
 ### Example 5. Removing linear deviations from parallel trends
 
@@ -214,13 +217,13 @@ results5 <- ES(long_data=sim_data, outcomevar="outcome",
                linearize_pretrends = TRUE)
 ```
 
-    ## INFO [2019-02-11 14:05:57] Beginning ES.
-    ## INFO [2019-02-11 14:05:57] Linearizing pre-trends.
-    ## INFO [2019-02-11 14:05:58] Beginning data stacking.
-    ## INFO [2019-02-11 14:06:17] Successfully produced a stacked dataset with 28,928 rows.
-    ## INFO [2019-02-11 14:06:18] Estimated heterogeneous case with OLS.
-    ## INFO [2019-02-11 14:06:18] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 14:06:18] ES is finished.
+    ## INFO [2019-02-11 14:28:37] Beginning ES.
+    ## INFO [2019-02-11 14:28:37] Linearizing pre-trends.
+    ## INFO [2019-02-11 14:28:37] Beginning data stacking.
+    ## INFO [2019-02-11 14:28:57] Successfully produced a stacked dataset with 27,992 rows.
+    ## INFO [2019-02-11 14:28:57] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 14:28:58] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 14:28:58] ES is finished.
 
 ### Example 6. Residualzing on covariates where some are discrete and some are continuous
 
@@ -248,13 +251,13 @@ results6 <- ES(long_data=sim_data, outcomevar="outcome",
                cont_covars = c('cont_covar1','cont_covar2'))
 ```
 
-    ## INFO [2019-02-11 14:06:18] Beginning ES.
-    ## INFO [2019-02-11 14:06:18] Residualizing on covariates.
-    ## INFO [2019-02-11 14:06:19] Beginning data stacking.
-    ## INFO [2019-02-11 14:06:38] Successfully produced a stacked dataset with 28,928 rows.
-    ## INFO [2019-02-11 14:06:39] Estimated heterogeneous case with OLS.
-    ## INFO [2019-02-11 14:06:39] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 14:06:39] ES is finished.
+    ## INFO [2019-02-11 14:28:58] Beginning ES.
+    ## INFO [2019-02-11 14:28:58] Residualizing on covariates.
+    ## INFO [2019-02-11 14:28:58] Beginning data stacking.
+    ## INFO [2019-02-11 14:29:18] Successfully produced a stacked dataset with 27,992 rows.
+    ## INFO [2019-02-11 14:29:19] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 14:29:19] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 14:29:19] ES is finished.
 
 ### Example 7. Filling in missing rows with zeros.
 
@@ -274,13 +277,13 @@ results7 <- ES(long_data=sim_data, outcomevar="outcome",
                fill_zeros = TRUE)
 ```
 
-    ## INFO [2019-02-11 14:06:39] Beginning ES.
-    ## INFO [2019-02-11 14:06:39] Filling in zeros.
-    ## INFO [2019-02-11 14:06:40] Beginning data stacking.
-    ## INFO [2019-02-11 14:06:59] Successfully produced a stacked dataset with 28,928 rows.
-    ## INFO [2019-02-11 14:07:00] Estimated heterogeneous case with OLS.
-    ## INFO [2019-02-11 14:07:00] Estimated homogeneous case with OLS.
-    ## INFO [2019-02-11 14:07:00] ES is finished.
+    ## INFO [2019-02-11 14:29:19] Beginning ES.
+    ## INFO [2019-02-11 14:29:19] Filling in zeros.
+    ## INFO [2019-02-11 14:29:19] Beginning data stacking.
+    ## INFO [2019-02-11 14:29:39] Successfully produced a stacked dataset with 27,992 rows.
+    ## INFO [2019-02-11 14:29:40] Estimated heterogeneous case with OLS.
+    ## INFO [2019-02-11 14:29:40] Estimated homogeneous case with OLS.
+    ## INFO [2019-02-11 14:29:40] ES is finished.
 
 Note: This cannot be combined with residualizing on covariates, since ES would need to know how to fill in the covariates during the years that observations are missing.
 

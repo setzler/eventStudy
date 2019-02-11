@@ -157,7 +157,10 @@ Let's generate some never-winners by re-coding some of the onset times as missin
 ```{r echo=T, eval=T, message=FALSE}
 # coding some observations as never-winners
 sim_data2 <- copy(sim_data)
-sim_data2[runif(nrow(sim_data)) < .5, treatment_year := NA]
+unit_var = "individual"
+onset_time_var = "treatment_year"
+sim_data2[, recode := runif(1, min = 0, max = 1), list(get(unit_var))]
+sim_data2[recode < 0.10, (onset_time_var) := NA]
 ```
 
 
