@@ -54,6 +54,9 @@ These optional arguments allow you to customize `ES` to deal with issues like an
 
 - `omitted_event_time`: This lets you decide the pre-treatment event time to use as the reference year. It must be an integer that is less than or equal to `-1`. The default is `-2`.
 - `min_control_gap` and `max_control_gap`: `min_control_gap` is the minimum number of time periods ahead that a cohort must receive treatment in order to be included in the control group (e.g., Fadlon & Nielsen, 2019, use `min_control_gap=5`). It must be an integer that is at least `1`. The default is `1`. `max_control_gap` is similar but for the maximum number of time periods ahead  (e.g., Fadlon & Nielsen, 2019, also use `max_control_gap=5`). It must be an integer that is at least as large as `min_control_gap`. The default is `Inf`.
+- `anticipation`: This drops observations from the control group this many time periods ahead of the control groups receiving the treatment. For example, consider a treatment group that receives treatment in 2001. If `min_control_gap=5` and `anticipation=0`, then another cohort treated in 2006 can be used as a control group up to 2005, but if `anticipation=1`, then they can be used as a control group up to 2004.
+- `homogeneous_ATT`: This will only estimate the pooled (homogeneous) treatment effects if set to `TRUE`, and skip estimating the cohort-specific effects, which may be slow for large data. Default is `FALSE`.
+- `never_treat_action`: This determines how to handle never-treated groups. Those who do not receive treatment should be coded as `NA`. The default option is `never_treat_action="none"`, in which case, it is expected that all observations are treated, and an error is thrown if any observations have `onset_time_var=NA`. Other options are: `never_treat_action="only"`, in which case only never-winners are used as control groups; `never_treat_action="exclude"`, in which case never-winners are never used as controls; and `never_treat_action="keep"`, in which case both never-winners and not-yet-winners are used as controls.
 - `control_subset_var` and `control_subset_event_time`: These variables allow one to require that the control group  satisfies a logical condition at a given event time. `control_subset_var` must be the name of a logical variable in the data (all values of this variable are `TRUE` or `FALSE`) and `control_subset_event_time` is an integer which specifies the event time at which the control group must have a value of `TRUE` on `control_subset_var`. The default is `control_subset_var=NA`, which bypasses this option. 
 - `fill_zeros`: `fill_zeros` is a logical indicator (`TRUE` or `FALSE`) which results in the data being filled and the outcome set to zero for all observations on a unit that are missing within the time frame included in the data. The default is `FALSE`.
 - `linearize_pretrends`: `linearize_pretrends` is a logical indicator that, when set to `TRUE`, results in linear pre-trends being fit during the pre-event years, and then residualized out of both the pre-event and post-event outcomes. The default is `FALSE`.
@@ -66,7 +69,7 @@ These optional arguments allow you to customize `ES` to deal with issues like an
 You can make your own plots with the results. As a convenience, we have prepared these functions to automatically make your plots:
 
 - `ES_plot_levels` will plot the levels across event times for the treated and control cohorts.
-- `ES_plot_ATTs` will plot the treatment effects across event times. By default, it will plot heterogeneous effects for each cohort; set `homogeneous_only = TRUE` to only plot the pooled effect under the homogeneity assumption.
+- `ES_plot_ATTs` will plot the treatment effects across event times. By default, it will plot heterogeneous effects for each cohort; set `homogeneous_ATT = TRUE` to only plot the pooled effect under the homogeneity assumption.
 
 
 # Examples
@@ -79,6 +82,7 @@ devtools::install_github("setzler/eventStudy/eventStudy")
 
 ```{r echo=T, eval=T, message=FALSE}
 library(eventStudy)
+library(data.table)
 library(ggplot2)
 ```
 
@@ -131,7 +135,7 @@ results <- ES(long_data=sim_data, outcomevar="outcome",
 
 ### Example 2. Estimation using only control cohorts that receive treatment at certain times in the future
 
-Let's only pair a control observation to a treatment observation if the control observation is treated at least 3 years later (`min_control_gap = 3`) and at most 5 years later (`max_control_gap = 5`): 
+Let's only pair a control observation to a treatment observation if the control observation is treated at least 3 years later (`min_control_gap = 3`) and at most 5 years later (`max_control_gap = 5`), and the year prior to their treatment may have anticipation so we set `anticipation=1` to exclude the year prior to treatment as control years: 
 
 
 ```{r echo=T, eval=T, message=FALSE}
@@ -139,7 +143,31 @@ Let's only pair a control observation to a treatment observation if the control 
 results2 <- ES(long_data=sim_data, outcomevar="outcome", 
                unit_var="individual", cal_time_var="year", 
                onset_time_var="treatment_year", cluster_vars="individual", 
-               min_control_gap = 3, max_control_gap = 5)
+               min_control_gap = 3, max_control_gap = 5, anticipation = 1)
+
+```
+
+
+
+
+### Example 3. Estimation using only never-winners as the control group
+
+Let's generate some never-winners by re-coding some of the onset times as missing:
+
+```{r echo=T, eval=T, message=FALSE}
+# coding some observations as never-winners
+sim_data2 <- copy(sim_data)
+sim_data2[runif(nrow(sim_data)) < .5, treatment_year := NA]
+```
+
+
+```{r echo=T, eval=T, message=FALSE}
+# run the event study
+results3 <- ES(long_data=sim_data2, outcomevar="outcome", 
+               unit_var="individual", cal_time_var="year", 
+               onset_time_var="treatment_year", cluster_vars="individual", 
+               never_treat_action = "only")
+
 ```
 
 
@@ -148,7 +176,7 @@ results2 <- ES(long_data=sim_data, outcomevar="outcome",
 
 
 
-### Example 3. Estimation using only control cohorts that satisfy a condition at an event time
+### Example 4. Estimation using only control cohorts that satisfy a condition at an event time
 
 Let's randomly assign some control groups to be valid in some years:
 
@@ -162,7 +190,7 @@ Now, with the `control_subset_var` and `control_subset_event_time` arguments, we
 
 ```{r echo=T, eval=T, message=FALSE}
 # run the event study
-results3 <- ES(long_data=sim_data, outcomevar="outcome", 
+results4 <- ES(long_data=sim_data, outcomevar="outcome", 
                unit_var="individual", cal_time_var="year", 
                onset_time_var="treatment_year", cluster_vars="individual", 
                control_subset_var="valid_control", control_subset_event_time=-1)
@@ -171,14 +199,14 @@ results3 <- ES(long_data=sim_data, outcomevar="outcome",
 
 
 
-### Example 4. Removing linear deviations from parallel trends
+### Example 5. Removing linear deviations from parallel trends
 
 Suppose we think that pre-trends differ from parallel in a linear way. Using `linearize_pretrends = TRUE` will estimate these linear trends on pre-event years and extrapolate the trends to post-event years:
 
 
 ```{r echo=T, eval=T, message=FALSE}
 # run the event study
-results4 <- ES(long_data=sim_data, outcomevar="outcome", 
+results5 <- ES(long_data=sim_data, outcomevar="outcome", 
                unit_var="individual", cal_time_var="year", 
                onset_time_var="treatment_year", cluster_vars="individual", 
                linearize_pretrends = TRUE)
@@ -188,7 +216,7 @@ results4 <- ES(long_data=sim_data, outcomevar="outcome",
 
 
 
-### Example 5. Residualzing on covariates where some are discrete and some are continuous
+### Example 6. Residualzing on covariates where some are discrete and some are continuous
 
 Let's add some discrete and continuous covariates to the data:
 
@@ -208,7 +236,7 @@ The argument `residualize_covariates = TRUE` will tell `ES` to residualize on co
 
 ```{r echo=T, eval=T, message=FALSE}
 # run the event study
-results5 <- ES(long_data=sim_data, outcomevar="outcome",
+results6 <- ES(long_data=sim_data, outcomevar="outcome",
                unit_var="individual", cal_time_var="year",
                onset_time_var="treatment_year", cluster_vars="individual",
                residualize_covariates = TRUE,
@@ -218,7 +246,7 @@ results5 <- ES(long_data=sim_data, outcomevar="outcome",
 
 
 
-### Example 6. Filling in missing rows with zeros.
+### Example 7. Filling in missing rows with zeros.
 
 Let's randomly drop some of the rows from the data so that it is no longer balanced:
 
@@ -231,7 +259,7 @@ Suppose that missing rows have a true value of zero for the outcome. We can add 
 
 ```{r echo=T, eval=T, message=FALSE}
 # run the event study
-results6 <- ES(long_data=sim_data, outcomevar="outcome", 
+results7 <- ES(long_data=sim_data, outcomevar="outcome", 
                unit_var="individual", cal_time_var="year", 
                onset_time_var="treatment_year", cluster_vars="individual",
                fill_zeros = TRUE)
@@ -262,7 +290,7 @@ ES_plot_ATTs(results, lower_event = -3, upper_event = 5) + ylab("ATT Estimate (9
 Finally, if we only care about the estimates under the homogeneity assumption, we can show these as follows:
 
 ```{r echo=T, eval=T, message=FALSE}
-ES_plot_ATTs(results, lower_event = -3, upper_event = 5, homogeneous_only = TRUE) + 
+ES_plot_ATTs(results, lower_event = -3, upper_event = 5, homogeneous_ATT = TRUE) + 
   ylab("ATT Estimate (95% CI)")
 
 ```

@@ -2,7 +2,7 @@
 
 #' @export
 ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
-               omitted_event_time= -2, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
+               omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
                control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
                residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
                homogeneous_ATT = FALSE, num_cores = 1){
@@ -16,6 +16,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   assertCharacter(cal_time_var,len=1)
   assertCharacter(cluster_vars)
   assertIntegerish(omitted_event_time,len=1,upper=-1)
+  assertIntegerish(anticipation,len=1,lower=0)
   assertIntegerish(min_control_gap,len=1,lower=1)
   if(!any(testIntegerish(max_control_gap,len=1,lower=min_control_gap),is.infinite(max_control_gap))){
     assertIntegerish(max_control_gap,len=1,lower=min_control_gap)
@@ -117,7 +118,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   flog.info("Beginning data stacking.")
   ES_data <- ES_clean_data(long_data = long_data, outcomevar = outcomevar,
                            unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
-                           min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
+                           anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
                            control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val)
 

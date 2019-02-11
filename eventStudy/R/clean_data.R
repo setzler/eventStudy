@@ -5,6 +5,7 @@ ES_clean_data <- function(long_data,
                           unit_var,
                           cal_time_var,
                           onset_time_var,
+                          anticipation = 0,
                           min_control_gap = 1,
                           max_control_gap = Inf,
                           omitted_event_time = -2,
@@ -104,7 +105,7 @@ ES_clean_data <- function(long_data,
 
     # Key step -- making sure to only use control groups pre-treatment and treated groups where there are control observations
     max_control_cohort <- max(possible_treated_control[[onset_time_var]])
-    possible_treated_control <- possible_treated_control[treated == 1 & get(cal_time_var) < max_control_cohort - (min_control_gap - 1) | treated == 0 & get(cal_time_var) < get(onset_time_var)- (min_control_gap - 1)]
+    possible_treated_control <- possible_treated_control[(treated == 1 & (get(cal_time_var) <  ref_onset_time + min_control_gap - anticipation))  | ((treated == 0) & (get(cal_time_var) < get(onset_time_var) - anticipation))]
     gc()
 
     i <- 0
