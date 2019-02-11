@@ -12,11 +12,6 @@ ES_clean_data <- function(long_data,
                           treated_subset_event_time=NA,
                           control_subset_var=NA,
                           control_subset_event_time=NA,
-                          ipw = FALSE,
-                          ipw_model = "linear",
-                          ipw_covars_discrete = NA,
-                          ipw_covars_cont = NA,
-                          ipw_composition_change = FALSE,
                           never_treat_action,
                           never_treat_val = NA) {
 
@@ -69,7 +64,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control <- list()
 
     possible_treated_control[[1]] <- input_dt[get(onset_time_var) == e,
-                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont)),
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
                                               with = FALSE
                                               ]
     gc()
@@ -77,7 +72,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control[[1]][, treated := 1]
 
     possible_treated_control[[2]] <- input_dt[between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
-                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont)),
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var)),
                                               with = FALSE
                                               ]
 
@@ -141,20 +136,6 @@ ES_clean_data <- function(long_data,
       gc()
       balanced_treated_control[[i]][, catt_specific_sample := i]
 
-      if(ipw == TRUE){
-
-        balanced_treated_control[[i]] <- ES_make_ipw_dt(did_dt = balanced_treated_control[[i]],
-                                                          ipw_composition_change = ipw_composition_change,
-                                                          ipw_covars_discrete = ipw_covars_discrete,
-                                                          ipw_covars_cont = ipw_covars_cont
-                                                          )
-
-      } else{
-        pr = NA
-        weight = NA
-        # just to make sure the next na.omit() below doesn't break
-      }
-
     }
 
     possible_treated_control <- NULL
@@ -167,7 +148,7 @@ ES_clean_data <- function(long_data,
     balanced_treated_control <- na.omit(balanced_treated_control)
     gc()
 
-    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, ipw_covars_discrete, ipw_covars_cont, pr, weight, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
+    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, pr, weight, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
     gc()
 
     balanced_treated_control <- NULL
@@ -200,12 +181,6 @@ ES_clean_data <- function(long_data,
   flog.info(sprintf("Successfully produced a stacked dataset with %s rows.",
                     format(dim(stack_across_cohorts_balanced_treated_control)[1], scientific = FALSE, big.mark = ","))
             )
-
-  if(ipw == TRUE & ipw_composition_change == TRUE){
-    flog.info("Estimated three seprate propensity score models per (ref_onset_time, CATT) with Treated-Post as the target population.")
-  } else if(ipw == TRUE & ipw_composition_change == FALSE){
-    flog.info("Estimated one propensity score model per (ref_onset_time, CATT) with Treated as the target population.")
-  }
 
   if(never_treat_action == 'only'){
     rm(never_treat_val)
@@ -448,130 +423,4 @@ ES_subset_to_balance <- function(long_data,
   flog.info("Reduced provided data to balanced panel.")
 
   return(input_dt)
-}
-
-ES_make_ipw_dt <- function(did_dt,
-                           ipw_model = "linear",
-                           ipw_covars_discrete = NULL,
-                           ipw_covars_cont = NULL,
-                           ipw_composition_change = FALSE){
-
-  # Just in case
-  input_dt <- copy(did_dt)
-
-  if(ipw_composition_change == TRUE){
-
-    # We have four groups in each CATT-specific sample -- Treated-Pre, Treated-Post, Control-Pre, and Control-Post
-    # Set reference group was treated == 1 and ref_event_time != omitted_event_time
-    # Approach: calculate three propensity scores, and weight relative to reference propensity score
-
-    # Reference group -- Treated-Post
-
-    input_dt[, ref_group := as.integer(treated == 1 & ref_event_time != omitted_event_time)]
-    input_dt[, treated_pre := as.integer(treated == 1 & ref_event_time == omitted_event_time)]
-    input_dt[, control_post := as.integer(treated == 0 & ref_event_time != omitted_event_time)]
-    input_dt[, control_pre := as.integer(treated == 0 & ref_event_time == omitted_event_time)]
-
-    if(!is.null(ipw_covars_discrete)){
-
-      levels <- sort(unique(input_dt[[ipw_covars_discrete]]))
-      dropped_levels = NA
-      dropped_target_levels = NA
-
-      for(l in levels){
-
-        # Pre-check to establish where common support fails, if at all
-        check <- input_dt[, list(mean_age = mean(get(ipw_covars_discrete) == l)),
-                          by = list(ref_onset_time, catt_specific_sample, ref_group, treated, ref_event_time)
-                          ]
-        gc()
-        varname_mean <- sprintf("mean_age%s", l)
-        setnames(check, c("mean_age"), c(varname_mean))
-
-        check <- check[get(varname_mean) == 0]
-        if(dim(check)[1] > 0){
-
-          input_dt <- input_dt[get(ipw_covars_discrete) != l]
-          dropped_levels = na.omit(c(dropped_levels, l))
-
-          if(sum(check$ref_group) == 1){
-            dropped_target_levels = na.omit(c(dropped_target_levels, l))
-          }
-
-        }
-
-      }
-
-      if(!is.na(dropped_levels[1]) & length(dropped_levels) > 0){
-        flog.info(paste0(sprintf("Dropped levels of %s for the ref_onset_time %s and ref_event_times (%s, %s) due to lack of common support: %s",
-                                 ipw_covars_discrete,
-                                 e,
-                                 omitted_event_time,
-                                 t,
-                                 paste0(dropped_levels, collapse = " , ")
-        )
-        )
-        )
-      }
-
-      if(!is.na(dropped_target_levels[1]) & length(dropped_target_levels) > 0){
-        flog.info(paste0(sprintf("Dropped levels of %s in target population for the ref_onset_time %s and ref_event_times (%s, %s): %s",
-                                 ipw_covars_discrete,
-                                 e,
-                                 omitted_event_time,
-                                 t,
-                                 paste0(dropped_target_levels, collapse = " , ")
-        )
-        )
-        )
-      }
-    }
-
-    if(!is.null(cont_covars)){
-
-      formula_input <- paste(paste0("factor(", na.omit(ipw_covars_discrete), ")", collapse = "+"),
-                             paste(na.omit(ipw_covars_cont), collapse = "+"),
-                             sep = " + "
-      )
-
-    } else{
-
-      formula_input <- paste(paste0("factor(", na.omit(ipw_covars_discrete), ")", collapse = "+"),
-                             paste(na.omit(ipw_covars_cont), collapse = "+"),
-                             collapse = " + "
-      )
-    }
-
-    input_dt[ref_group == 1 | treated_pre == 1, pr := predict(lm(as.formula(paste0("ref_group ~ ", formula_input)),data = input_dt[ref_group == 1 | treated_pre == 1]))]
-    input_dt[ref_group == 1 | control_post == 1, pr := predict(lm(as.formula(paste0("ref_group ~ ", formula_input)),data = input_dt[ref_group == 1 | control_post == 1]))]
-    input_dt[ref_group == 1 | control_pre == 1, pr := predict(lm(as.formula(paste0("ref_group ~ ", formula_input)),data = input_dt[ref_group == 1 | control_pre == 1]))]
-
-    input_dt[ref_group != 1, weight_unadj := pr / (1 - pr)]
-    input_dt[ref_group != 1, normalizing_constant := (1 / dim(input_dt[ref_group != 1])[1]) * sum(weight_unadj)]
-    input_dt[ref_group != 1, weight := weight_unadj / normalizing_constant]
-    input_dt[ref_group == 1, weight := 1]
-    input_dt[, c("weight_unadj", "normalizing_constant") := NULL]
-
-    pr = "pr" # for the eventual na.omit()
-    weight = "weight" # for the eventual na.omit()
-
-  } else if(ipw_composition_change == FALSE){
-
-    formula_input <- paste0(paste0("factor(", na.omit(ipw_covars_discrete), ")", collapse = "+"),
-                            paste(na.omit(ipw_covars_cont), collapse = "+"),
-                            collapse = "+"
-    )
-
-    if(ipw_model == "linear"){
-      input_dt[, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),data = input_dt))]
-    } else if(ipw_model == "logit"){
-      input_dt[, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input)),family = binomial(link = "logit"), data = input_dt))]
-    } else if(ipw_model == "probit"){
-      input_dt[, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),family = binomial(link = "probit"), data = input_dt))]
-    }
-
-    pr = "pr" # for the eventual na.omit()
-    weight = NA # just to make sure the next na.omit() below doesn't break
-  }
-
 }
