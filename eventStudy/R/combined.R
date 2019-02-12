@@ -37,7 +37,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     }
   }
   assertFlag(homogeneous_ATT)
-  assertIntegerish(num_cores,len=1)
+  assertIntegerish(num_cores,len=1,lower=1)
 
   # check that all of these variables are actually in the data.table, and provide custom error messages.
   if(!(outcomevar %in% names(long_data))){stop(sprintf("Variable outcomevar='%s' is not in the long_data you provided.",outcomevar))}
@@ -120,7 +120,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                            anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
                            control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
-                           never_treat_action = never_treat_action, never_treat_val = never_treat_val)
+                           never_treat_action = never_treat_action, never_treat_val = never_treat_val,
+                           cluster_vars = cluster_vars)
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
