@@ -6,6 +6,8 @@ ES_clean_data <- function(long_data,
                           cal_time_var,
                           onset_time_var,
                           cluster_vars,
+                          discrete_covars = NULL,
+                          cont_covars = NULL,
                           anticipation = 0,
                           min_control_gap = 1,
                           max_control_gap = Inf,
@@ -17,21 +19,16 @@ ES_clean_data <- function(long_data,
                           never_treat_action = 'none',
                           never_treat_val = NA) {
 
-  # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
-  # Can revisit this to remove the copy for memory efficiency at a later point.
-
-  input_dt <- copy(long_data)
-
   # Restriction based on supplied omitted_event_time
 
-  min_eligible_cohort <- min(input_dt[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])
-  input_dt <- input_dt[get(onset_time_var) >= min_eligible_cohort]
+  min_eligible_cohort <- min(long_data[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])
+  long_data[, relevant_subset := as.integer(get(onset_time_var) >= min_eligible_cohort)]
   gc()
 
   # Setting up
 
-  onset_times <- input_dt[, sort(unique(get(onset_time_var)))]
-  cal_times <- input_dt[, sort(unique(get(cal_time_var)))]
+  onset_times <- long_data[relevant_subset == 1, sort(unique(get(onset_time_var)))]
+  cal_times <- long_data[relevant_subset == 1, sort(unique(get(cal_time_var)))]
 
   min_onset_time <- min(onset_times)
   max_onset_time <- max(onset_times)
@@ -65,16 +62,16 @@ ES_clean_data <- function(long_data,
     # For a given treated cohort, possible_treated_control is the subset of possible treated and control observations
     possible_treated_control <- list()
 
-    possible_treated_control[[1]] <- input_dt[get(onset_time_var) == e,
-                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars)),
+    possible_treated_control[[1]] <- long_data[relevant_subset == 1 & get(onset_time_var) == e,
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars)),
                                               with = FALSE
                                               ]
     gc()
     possible_treated_control[[1]][, ref_onset_time := e]
     possible_treated_control[[1]][, treated := 1]
 
-    possible_treated_control[[2]] <- input_dt[between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
-                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars)),
+    possible_treated_control[[2]] <- long_data[relevant_subset == 1 & between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars)),
                                               with = FALSE
                                               ]
 
@@ -154,7 +151,7 @@ ES_clean_data <- function(long_data,
     balanced_treated_control <- na.omit(balanced_treated_control)
     gc()
 
-    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
+    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
     gc()
 
     balanced_treated_control <- NULL
@@ -192,6 +189,9 @@ ES_clean_data <- function(long_data,
     rm(never_treat_val)
   }
 
+  long_data[, relevant_subset := NULL]
+  gc()
+
   return(stack_across_cohorts_balanced_treated_control)
 }
 
@@ -199,22 +199,18 @@ ES_parallelize_trends <- function(long_data,
                                   outcomevar,
                                   unit_var,
                                   cal_time_var,
-                                  onset_time_var) {
+                                  onset_time_var,
+                                  anticipation = 0) {
 
-  # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
-  # Can revisit this to remove the copy for memory efficiency at a later point.
-
-  input_dt <- copy(long_data)
-
-  cal_times <- input_dt[, sort(unique(get(cal_time_var)))]
+  cal_times <- long_data[, sort(unique(get(cal_time_var)))]
   min_cal_time <- min(cal_times)
 
-  start_cols <- copy(colnames(input_dt))
+  start_cols <- copy(colnames(long_data))
 
   lm_formula_input <- paste(c(sprintf("factor(%s)", cal_time_var), sprintf("factor(%s)*%s", onset_time_var, cal_time_var)), collapse = "+")
 
   est <- lm(as.formula(paste0(eval(outcomevar), " ~ ", lm_formula_input)),
-            data = input_dt[get(cal_time_var) < get(onset_time_var)]
+            data = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)]
             )
   gc()
 
@@ -229,34 +225,30 @@ ES_parallelize_trends <- function(long_data,
   results <- results[, list(rn, Estimate)]
   setnames(results, c("rn", "Estimate"), c(onset_time_var, "pre_slope"))
 
-  input_dt <- merge(input_dt, results, by = onset_time_var, all.x = TRUE)
-  input_dt[!is.na(pre_slope), (outcomevar) := get(outcomevar) - (get(cal_time_var) - min_cal_time) * pre_slope]
+  long_data <- merge(long_data, results, by = onset_time_var, all.x = TRUE)
+  long_data[!is.na(pre_slope), (outcomevar) := get(outcomevar) - ((get(cal_time_var) - min_cal_time) * pre_slope)]
 
-  all_added_cols <- setdiff(colnames(input_dt), start_cols)
-  input_dt[, (all_added_cols) := NULL]
+  all_added_cols <- setdiff(colnames(long_data), start_cols)
+  long_data[, (all_added_cols) := NULL]
   gc()
 
-  setorderv(input_dt, c(unit_var, cal_time_var))
+  setorderv(long_data, c(unit_var, cal_time_var))
 
   # flog.info("Residualized out cohort-specific pre-trends using only pre-treatment data.")
 
-  return(input_dt)
+  return(long_data)
 }
 
 ES_residualize_covariates <- function(long_data,
-                                              outcomevar,
-                                              unit_var,
-                                              cal_time_var,
-                                              onset_time_var,
-                                              discrete_covars = NULL,
-                                              cont_covars = NULL) {
+                                      outcomevar,
+                                      unit_var,
+                                      cal_time_var,
+                                      onset_time_var,
+                                      discrete_covars = NULL,
+                                      cont_covars = NULL,
+                                      anticipation = 0) {
 
-  # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
-  # Can revisit this to remove the copy for memory efficiency at a later point.
-
-  input_dt <- copy(long_data)
-
-  start_cols <- copy(colnames(input_dt))
+  start_cols <- copy(colnames(long_data))
 
   if(!is.null(discrete_covars)){
 
@@ -268,7 +260,7 @@ ES_residualize_covariates <- function(long_data,
     discrete_covar_formula_input <- c()
     for(var in discrete_covars){
       i <- i + 1
-      min_pre_value <- min(input_dt[get(cal_time_var) < get(onset_time_var)][[var]])
+      min_pre_value <- long_data[get(cal_time_var) < (get(onset_time_var) - anticipation), min(get(var))]
       reference_lookup[[i]] <- data.table(varname = var, reference_level = as.character(min_pre_value))
 
       discrete_covar_formula_input <- c(discrete_covar_formula_input,
@@ -288,26 +280,24 @@ ES_residualize_covariates <- function(long_data,
     formula_input <- paste(paste0(na.omit(discrete_covar_formula_input), collapse = "+"),
                            paste0(na.omit(cont_covars), collapse = "+"),
                            sep = " + "
-    )
+                           )
 
   } else if(is.null(cont_covars) & !is.null(discrete_covars)){
 
-    formula_input <- paste(paste0(na.omit(discrete_covar_formula_input), collapse = "+"),
-                           paste0(na.omit(cont_covars), collapse = "+"),
-                           collapse = " + "
-    )
+    formula_input <- paste0(paste0(na.omit(discrete_covar_formula_input), collapse = "+"),
+                           paste0(na.omit(cont_covars), collapse = "+")
+                           )
 
   } else{
 
-    formula_input <- paste(paste0(na.omit(cont_covars), collapse = "+"),
-                           paste0(na.omit(discrete_covar_formula_input), collapse = "+"),
-                           collapse = " + "
-    )
+    formula_input <- paste0(paste0(na.omit(cont_covars), collapse = "+"),
+                           paste0(na.omit(discrete_covar_formula_input), collapse = "+")
+                           )
 
   }
 
   est <- lm(as.formula(paste0(eval(outcomevar), "~", formula_input)),
-            data = input_dt[get(cal_time_var) < get(onset_time_var)],
+            data = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)],
             model = FALSE
   )
   gc()
@@ -321,7 +311,7 @@ ES_residualize_covariates <- function(long_data,
 
     for(var in cont_covars){
       loading = results[rn == var]$Estimate
-      input_dt[, outcome := outcome - loading*get(var)]
+      long_data[, outcome := outcome - (loading*get(var))]
     }
   }
 
@@ -344,29 +334,29 @@ ES_residualize_covariates <- function(long_data,
       results_for_merge <- results[, c("Estimate", var), with = FALSE]
       setnames(results_for_merge, c("Estimate"), sprintf("pre_%s", var))
       results_for_merge <- na.omit(results_for_merge)
-      input_dt <- merge(input_dt, results_for_merge, by = var, all.x = TRUE)
+      long_data <- merge(long_data, results_for_merge, by = var, all.x = TRUE)
       pre_intercepts = c(pre_intercepts, sprintf("pre_%s", var))
     }
 
-    input_dt[, pre_intercept := rowSums(.SD), .SDcols = pre_intercepts]
-    input_dt <- input_dt[!is.na(pre_intercept)]
+    long_data[, pre_intercept := rowSums(.SD), .SDcols = pre_intercepts]
+    long_data <- long_data[!is.na(pre_intercept)]
     # ^ Note: prior step above will restrict the data to only values of discrete_covars found in the pre period
 
-    input_dt[, (outcomevar) := get(outcomevar) - pre_intercept - intercept]
+    long_data[, (outcomevar) := get(outcomevar) - pre_intercept - intercept]
 
   }
 
-  all_added_cols <- setdiff(colnames(input_dt), start_cols)
+  all_added_cols <- setdiff(colnames(long_data), start_cols)
   if(length(all_added_cols) > 0){
-    input_dt[, (all_added_cols) := NULL]
+    long_data[, (all_added_cols) := NULL]
   }
   gc()
 
-  setorderv(input_dt, c(unit_var, cal_time_var))
+  setorderv(long_data, c(unit_var, cal_time_var))
 
   # flog.info("Residualized out contribution of covariates using only pre-treatment data.")
 
-  return(input_dt)
+  return(long_data)
 }
 
 ES_expand_to_balance <- function(long_data,

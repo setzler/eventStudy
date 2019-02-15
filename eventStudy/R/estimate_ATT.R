@@ -5,39 +5,72 @@ ES_estimate_ATT <- function(ES_data,
                             outcomevar,
                             onset_time_var,
                             cluster_vars,
+                            residualize_covariates = FALSE,
+                            discrete_covars = NULL,
+                            cont_covars = NULL,
                             homogeneous_ATT = TRUE,
                             omitted_event_time = -2,
                             ipw = FALSE,
                             ipw_composition_change = FALSE
                             ) {
 
-  # Just in case, we immediately make a copy of the input ES_data and run everything on the full copy
-  # Can revisit this to remove the copy for memory efficiency at a later point.
-
-  model_dt <- copy(ES_data)
-
-  onset_times <- sort(unique(model_dt[, .N, by = eval(onset_time_var)][[onset_time_var]]))
+  onset_times <- sort(unique(ES_data[, .N, by = eval(onset_time_var)][[onset_time_var]]))
   min_onset_time <- min(onset_times)
   max_onset_time <- max(onset_times)
 
-  model_dt[, ref_onset_ref_event_time := .GRP, by = list(ref_onset_time, ref_event_time)]
-  model_dt[, unit_sample := .GRP, by = list(get(onset_time_var), catt_specific_sample, ref_onset_time)]
-  model_dt[, cluster_on_this := .GRP, by = cluster_vars]
+  ES_data[, ref_onset_ref_event_time := .GRP, by = list(ref_onset_time, ref_event_time)]
+  ES_data[, unit_sample := .GRP, by = list(get(onset_time_var), catt_specific_sample, ref_onset_time)]
+  ES_data[, cluster_on_this := .GRP, by = cluster_vars]
 
-  start_cols <- copy(colnames(model_dt))
+  if(residualize_covariates == FALSE & ipw == FALSE){
+
+    if(!is.null(discrete_covars)){
+
+      # For felm(), want to tell which factor combination will be sent to the intercept
+      # Let's set it to the min
+
+      i <- 0
+      reference_lookup <- list()
+      discrete_covar_formula_input <- c()
+      for(var in discrete_covars){
+        i <- i + 1
+        min_pre_value <- ES_data[, min(get(var))]
+        reference_lookup[[i]] <- data.table(varname = var, reference_level = as.character(min_pre_value))
+
+        discrete_covar_formula_input <- c(discrete_covar_formula_input,
+                                          sprintf("relevel(as.factor(%s), ref = '%s')", var, min_pre_value))
+
+        var <- NULL
+        min_pre_value <- NULL
+      }
+      reference_lookup <- rbindlist(reference_lookup, use.names = TRUE)
+
+    } else{
+      discrete_covar_formula_input = NA
+    }
+
+    if(!is.null(cont_covars)){
+      cont_covar_formula_input = paste0(na.omit(cont_covars), collapse = "+")
+    } else{
+      cont_covar_formula_input = NA
+    }
+
+  }
+
+  start_cols <- copy(colnames(ES_data))
 
   if (homogeneous_ATT == FALSE) {
 
-    for (h in min(model_dt$ref_onset_time):max(model_dt$ref_onset_time)) {
-      for (r in setdiff(min(model_dt[ref_onset_time == h]$ref_event_time):max(model_dt[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
+    for (h in min(ES_data$ref_onset_time):max(ES_data$ref_onset_time)) {
+      for (r in setdiff(min(ES_data[ref_onset_time == h]$ref_event_time):max(ES_data[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
         var <- sprintf("ref_onset_time%s_catt%s", h, r)
-        model_dt[, (var) := as.integer(ref_onset_time == h & ref_event_time == r & get(onset_time_var) == h)]
+        ES_data[, (var) := as.integer(ref_onset_time == h & ref_event_time == r & get(onset_time_var) == h)]
       }
     }
 
-    new_cols <- setdiff(colnames(model_dt), start_cols)
+    new_cols <- setdiff(colnames(ES_data), start_cols)
     new_cols_used <- gsub("\\-", "lead", new_cols) # "-" wreaks havoc otherwise, syntactically
-    setnames(model_dt, new_cols, new_cols_used)
+    setnames(ES_data, new_cols, new_cols_used)
 
     # Should now be able to combine all of the above in a natural way
     felm_formula_input <- paste(new_cols_used, collapse = "+")
@@ -48,32 +81,46 @@ ES_estimate_ATT <- function(ES_data,
         # Construct ATT weights and estimate WLS
         # For ipw_composition_change == TRUE case, make them as part of ES_clean_data
 
-        model_dt[treated == 1, weight := 1]
-        model_dt[treated == 0, weight := (pr / (1 - pr))]
+        ES_data[treated == 1, weight := 1]
+        ES_data[treated == 0, weight := (pr / (1 - pr))]
 
         # This would be the place to add additional assumptions
         # E.g., restrict to propensity scores strictly between 0 and 1
 
-        model_dt = model_dt[between(pr, 0, 1, incbounds = FALSE)]
+        ES_data[, pr_subset := as.integer(between(pr, 0, 1, incbounds = FALSE))]
         gc()
+      } else{
+        ES_data[, pr_subset := 1L]
       }
 
       # Pre-processing some issues of numerical precision
-      model_dt[weight < 0, weight := 0]
+      ES_data[weight < 0, weight := 0]
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = model_dt, weights = model_dt$weight,
+                  data = ES_data[pr_subset == 1], weights = ES_data[pr_subset == 1]$weight,
+                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+      )
+
+    } else if(residualize_covariates == TRUE){
+
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                  data = ES_data,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
 
     } else{
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = model_dt,
+
+      felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
+      fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
+
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+                  data = ES_data,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
+
     }
 
-    model_dt <- NULL
+    ES_data <- NULL
     gc()
 
     results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
@@ -93,14 +140,14 @@ ES_estimate_ATT <- function(ES_data,
     results <- results[rn == "catt"]
   } else {
 
-    for (r in setdiff(min(model_dt$ref_event_time):max(model_dt$ref_event_time), omitted_event_time)) {
+    for (r in setdiff(min(ES_data$ref_event_time):max(ES_data$ref_event_time), omitted_event_time)) {
       var <- sprintf("att%s", r)
-      model_dt[, (var) := as.integer(ref_event_time == r & ref_onset_time == get(onset_time_var))]
+      ES_data[, (var) := as.integer(ref_event_time == r & ref_onset_time == get(onset_time_var))]
     }
 
-    new_cols <- setdiff(colnames(model_dt), start_cols)
+    new_cols <- setdiff(colnames(ES_data), start_cols)
     new_cols_used <- gsub("\\-", "lead", new_cols) # "-" wreaks havoc otherwise, syntactically
-    setnames(model_dt, new_cols, new_cols_used)
+    setnames(ES_data, new_cols, new_cols_used)
 
     # Should now be able to combine all of the above in a natural way
     felm_formula_input <- paste(c(new_cols_used), collapse = "+")
@@ -111,32 +158,46 @@ ES_estimate_ATT <- function(ES_data,
         # Construct ATT weights and estimate WLS
         # For ipw_composition_change == TRUE case, make them as part of ES_clean_data
 
-        model_dt[treated == 1, weight := 1]
-        model_dt[treated == 0, weight := (pr / (1 - pr))]
+        ES_data[treated == 1, weight := 1]
+        ES_data[treated == 0, weight := (pr / (1 - pr))]
 
         # This would be the place to add additional assumptions
         # E.g., restrict to propensity scores strictly between 0 and 1
 
-        model_dt = model_dt[between(pr, 0, 1, incbounds = FALSE)]
+        ES_data[, pr_subset := as.integer(between(pr, 0, 1, incbounds = FALSE))]
         gc()
+      } else{
+        ES_data[, pr_subset := 1L]
       }
 
       # Pre-processing some issues of numerical precision
-      model_dt[weight < 0, weight := 0]
+      ES_data[weight < 0, weight := 0]
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = model_dt, weights = model_dt$weight,
+                  data = ES_data[pr_subset == 1], weights = ES_data[pr_subset == 1]$weight,
+                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+      )
+
+    } else if(residualize_covariates == TRUE){
+
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                  data = ES_data,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
 
     } else{
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = model_dt,
+
+      felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
+      fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
+
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+                  data = ES_data,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
+
     }
 
-    model_dt <- NULL
+    ES_data <- NULL
     gc()
 
     results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)

@@ -39,6 +39,12 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   assertFlag(homogeneous_ATT)
   assertIntegerish(num_cores,len=1,lower=1)
 
+  # check that anticipation choice and omitted_event_time choice don't conflict
+  if(omitted_event_time + anticipation > -1){
+    stop(sprintf("omitted_event_time='%s' and anticipation='%s' implies overlap of pre-treatment and anticipation periods. Let me suggest omitted_event_time<='%s'",
+                 omitted_event_time, anticipation, ((-1 * anticipation) - 1)))
+  }
+
   # check that all of these variables are actually in the data.table, and provide custom error messages.
   if(!(outcomevar %in% names(long_data))){stop(sprintf("Variable outcomevar='%s' is not in the long_data you provided.",outcomevar))}
   if(!(unit_var %in% names(long_data))){stop(sprintf("Variable unit_var='%s' is not in the long_data you provided.",unit_var))}
@@ -51,18 +57,30 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     if(!(control_subset_var %in% names(long_data))){stop(sprintf("Variable control_subset_var='%s' is not in the long_data you provided.",control_subset_var))}
     if(!(long_data[,typeof(get(control_subset_var))]=="logical")){stop(sprintf("Variable control_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var))}
   }
-  if(residualize_covariates){
-    if(testCharacter(discrete_covars)){
-      for(vv in discrete_covars){
-        if(!(vv %in% names(long_data))){stop(sprintf("Variable discrete_covars='%s' is not in the long_data you provided.",vv))}
-      }
-    }
-    if(testCharacter(cont_covars)){
-      for(vv in cont_covars){
-        if(!(vv %in% names(long_data))){stop(sprintf("Variable cont_covars='%s' is not in the long_data you provided.",vv))}
-      }
+  if(testCharacter(discrete_covars)){
+    for(vv in discrete_covars){
+      if(!(vv %in% names(long_data))){stop(sprintf("Variable discrete_covars='%s' is not in the long_data you provided.",vv))}
     }
   }
+  if(testCharacter(cont_covars)){
+    for(vv in cont_covars){
+      if(!(vv %in% names(long_data))){stop(sprintf("Variable cont_covars='%s' is not in the long_data you provided.",vv))}
+    }
+  }
+
+  # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var)
+  design_vars <- c(cal_time_var, onset_time_var)
+  if(testCharacter(discrete_covars)){
+    for(vv in discrete_covars){
+      if(vv %in% design_vars){stop(sprintf("Variable discrete_covars='%s' is among %s, which are already controlled in the design.",vv))}
+    }
+  }
+  if(testCharacter(cont_covars)){
+    for(vv in cont_covars){
+      if(vv %in% design_vars){stop(sprintf("Variable cont_covars='%s' is among %s, which are already controlled in the design.",vv))}
+    }
+  }
+
 
   # check that user correctly input what to do with never treated
   if(!(never_treat_action %in% c('none', 'exclude', 'keep', 'only'))){
@@ -105,12 +123,12 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   # linearize pre-trends; never-treated will be treated as a single cohort
   if(linearize_pretrends){
     flog.info("Linearizing pre-trends.")
-    long_data <- ES_parallelize_trends(long_data, outcomevar, unit_var, cal_time_var, onset_time_var)
+    long_data <- ES_parallelize_trends(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, anticipation = anticipation)
   }
 
   if(residualize_covariates){
     flog.info("Residualizing on covariates.")
-    ES_residualize_covariates(long_data, outcomevar, unit_var, cal_time_var, onset_time_var,
+    long_data <- ES_residualize_covariates(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, anticipation = anticipation,
                               discrete_covars = discrete_covars, cont_covars = cont_covars)
   }
 
@@ -121,16 +139,32 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
                            control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val,
-                           cluster_vars = cluster_vars)
+                           cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars)
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
-    ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data, outcomevar=outcomevar, onset_time_var = onset_time_var, cluster_vars = cluster_vars, homogeneous_ATT = homogeneous_ATT)
+    ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data,
+                                         outcomevar=outcomevar,
+                                         onset_time_var = onset_time_var,
+                                         cluster_vars = cluster_vars,
+                                         homogeneous_ATT = homogeneous_ATT,
+                                         omitted_event_time = omitted_event_time,
+                                         discrete_covars = discrete_covars,
+                                         cont_covars = cont_covars,
+                                         residualize_covariates = residualize_covariates)
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
     ES_results_hetero = NULL
   }
-  ES_results_homo <- ES_estimate_ATT(ES_data = ES_data, outcomevar=outcomevar, onset_time_var = onset_time_var, cluster_vars = cluster_vars, homogeneous_ATT = TRUE)
+  ES_results_homo <- ES_estimate_ATT(ES_data = ES_data,
+                                     outcomevar=outcomevar,
+                                     onset_time_var = onset_time_var,
+                                     cluster_vars = cluster_vars,
+                                     homogeneous_ATT = TRUE,
+                                     omitted_event_time = omitted_event_time,
+                                     discrete_covars = discrete_covars,
+                                     cont_covars = cont_covars,
+                                     residualize_covariates = residualize_covariates)
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect levels by treatment/control
@@ -145,7 +179,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 }
 
 #' @export
-ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor = 1.96, homogeneous_ATT = FALSE){
+ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor = 1.96, homogeneous_ATT = FALSE, omitted_event_time = -2){
 
   figdata <- figdata[rn %in% c("att","catt")]
   figdata[, ref_event_time := as.numeric(ref_event_time)]
@@ -161,14 +195,14 @@ ES_plot_ATTs <- function(figdata, lower_event = -3, upper_event = 5, ci_factor =
       geom_errorbar(aes(ymin = estimate - ci_factor * cluster_se, ymax = estimate + ci_factor * cluster_se)) +
       scale_x_continuous(breaks = pretty_breaks()) +
       labs(x = "Event Time") +
-      annotate(geom = "text", x = -2, y = 0, label = "(Omitted)", size = 4)
+      annotate(geom = "text", x = omitted_event_time, y = 0, label = "(Omitted)", size = 4)
   } else {
     fig <- ggplot(aes( x = jitter_event_time, y = estimate, colour = factor(ref_onset_time)), data = figdata) +
       geom_point() + theme_bw(base_size = 16) +
       geom_errorbar(aes(ymin = estimate - ci_factor * cluster_se, ymax = estimate + ci_factor * cluster_se)) +
       scale_x_continuous(breaks = pretty_breaks()) +
       labs(x = "Event Time", color = "Cohort") +
-      annotate(geom = "text", x = -2, y = 0, label = "(Omitted)", size = 4)
+      annotate(geom = "text", x = omitted_event_time, y = 0, label = "(Omitted)", size = 4)
   }
 
   return(fig)
