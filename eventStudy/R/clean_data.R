@@ -367,35 +367,30 @@ ES_expand_to_balance <- function(long_data,
                                  time_invar_covars = NULL
                                  ) {
 
-  # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
-  # Can revisit this to remove the copy for memory efficiency at a later point.
-
-  input_dt <- copy(long_data)
-
-  # Expand input_dt to maximal balanced panel, introducing NAs where needed
-  input_dt <- setDT(input_dt, key = c(unit_var, cal_time_var))[CJ(get(unit_var), get(cal_time_var), unique=TRUE)]
+  # Expand long_data to maximal balanced panel, introducing NAs where needed
+  long_data <- setDT(long_data, key = c(unit_var, cal_time_var))[CJ(get(unit_var), get(cal_time_var), unique=TRUE)]
 
   if(!is.null(vars_to_fill)){
     # replace NAs of provided vars_to_fill columns with zeros
     for (j in vars_to_fill){
-      set(input_dt, which(is.na(input_dt[[j]])), j, 0)
+      set(long_data, which(is.na(long_data[[j]])), j, 0)
     }
   }
 
-  setorderv(input_dt, c(unit_var, cal_time_var))
+  setorderv(long_data, c(unit_var, cal_time_var))
   gc()
 
-  input_dt[, (onset_time_var) := unique(get(onset_time_var)[!is.na(get(onset_time_var))]), list(get(unit_var))]
+  long_data[, (onset_time_var) := unique(get(onset_time_var)[!is.na(get(onset_time_var))]), list(get(unit_var))]
 
   if(!is.null(time_invar_covars)){
     # fill in time-invariant values
-    input_dt[, (time_invar_covars) := lapply(.SD, max, na.rm = TRUE), by = unit_var, .SDcols = time_invar_covars]
+    long_data[, (time_invar_covars) := lapply(.SD, max, na.rm = TRUE), by = unit_var, .SDcols = time_invar_covars]
   }
 
 
   #flog.info("Expanded provided data to balanced panel and filled missings with 0 for vars_to_fill.")
 
-  return(input_dt)
+  return(long_data)
 }
 
 ES_subset_to_balance <- function(long_data,
