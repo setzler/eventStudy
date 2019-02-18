@@ -5,7 +5,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
                control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
                residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
-               homogeneous_ATT = FALSE, num_cores = 1){
+               homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL){
 
   flog.info("Beginning ES.")
 
@@ -67,6 +67,9 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       if(!(vv %in% names(long_data))){stop(sprintf("Variable cont_covars='%s' is not in the long_data you provided.",vv))}
     }
   }
+  if(testCharacter(reg_weights)){
+    if(!(reg_weights %in% names(long_data))){stop(sprintf("Variable reg_weights='%s' is not in the long_data you provided.",reg_weights))}
+  }
 
   # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var)
   design_vars <- c(cal_time_var, onset_time_var)
@@ -123,13 +126,17 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   # linearize pre-trends; never-treated will be treated as a single cohort
   if(linearize_pretrends){
     flog.info("Linearizing pre-trends.")
-    long_data <- ES_parallelize_trends(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, anticipation = anticipation)
+    long_data <- ES_parallelize_trends(long_data = long_data, outcomevar = outcomevar,
+                                       unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
+                                       anticipation = anticipation, reg_weights = reg_weights)
   }
 
   if(residualize_covariates){
     flog.info("Residualizing on covariates.")
-    long_data <- ES_residualize_covariates(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, anticipation = anticipation,
-                              discrete_covars = discrete_covars, cont_covars = cont_covars)
+    long_data <- ES_residualize_covariates(long_data = long_data, outcomevar = outcomevar,
+                                           unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
+                                           anticipation = anticipation, discrete_covars = discrete_covars, cont_covars = cont_covars,
+                                           reg_weights = reg_weights)
   }
 
   # process data
@@ -139,7 +146,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
                            control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val,
-                           cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars)
+                           cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights)
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
@@ -151,7 +158,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                          omitted_event_time = omitted_event_time,
                                          discrete_covars = discrete_covars,
                                          cont_covars = cont_covars,
-                                         residualize_covariates = residualize_covariates)
+                                         residualize_covariates = residualize_covariates,
+                                         reg_weights = reg_weights)
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
     ES_results_hetero = NULL
@@ -164,11 +172,17 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                      omitted_event_time = omitted_event_time,
                                      discrete_covars = discrete_covars,
                                      cont_covars = cont_covars,
-                                     residualize_covariates = residualize_covariates)
+                                     residualize_covariates = residualize_covariates,
+                                     reg_weights = reg_weights)
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect levels by treatment/control
-  ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = mean(get(outcomevar)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+  if(!(is.null(reg_weights))){
+    # STILL NEED TO FIX THE SEs to be WEIGHTEDs; for now use unweighted
+    ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = weighted.mean(get(outcomevar), get(reg_weights)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+  } else{
+    ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = mean(get(outcomevar)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+  }
 
   # export
   figdata <- rbindlist(list(ES_results_hetero, ES_results_homo, ES_treatcontrol_means), use.names = TRUE, fill=TRUE)

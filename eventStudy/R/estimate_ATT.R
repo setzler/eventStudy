@@ -10,6 +10,7 @@ ES_estimate_ATT <- function(ES_data,
                             cont_covars = NULL,
                             homogeneous_ATT = TRUE,
                             omitted_event_time = -2,
+                            reg_weights = NULL,
                             ipw = FALSE,
                             ipw_composition_change = FALSE
                             ) {
@@ -103,21 +104,34 @@ ES_estimate_ATT <- function(ES_data,
 
     } else if(residualize_covariates == TRUE){
 
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = ES_data,
-                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-      )
+      if(!(is.null(reg_weights))){
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                    data = ES_data, weights = ES_data[[reg_weights]],
+                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+        )
+      } else{
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                    data = ES_data,
+                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+        )
+      }
 
     } else{
 
       felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
       fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
 
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
-                  data = ES_data,
-                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-      )
-
+      if(!(is.null(reg_weights))){
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+                    data = ES_data, weights = ES_data[[reg_weights]],
+                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+        )
+      } else{
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+                    data = ES_data,
+                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+        )
+      }
     }
 
     ES_data <- NULL
@@ -180,20 +194,34 @@ ES_estimate_ATT <- function(ES_data,
 
     } else if(residualize_covariates == TRUE){
 
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = ES_data,
-                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-      )
+      if(!(is.null(reg_weights))){
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                    data = ES_data, weights = ES_data[[reg_weights]],
+                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+        )
+      } else{
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+                    data = ES_data,
+                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+        )
+      }
 
     } else{
 
       felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
       fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
 
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
-                  data = ES_data,
-                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-      )
+      if(!(is.null(reg_weights))){
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+                    data = ES_data, weights = ES_data[[reg_weights]],
+                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+        )
+      } else{
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+                    data = ES_data,
+                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+        )
+      }
 
     }
 
@@ -216,12 +244,16 @@ ES_estimate_ATT <- function(ES_data,
 
   if(homogeneous_ATT == FALSE & ipw == TRUE){
     flog.info("Estimated heterogeneous case with WLS using IPW.")
-  } else if(homogeneous_ATT == FALSE & ipw == FALSE){
+  } else if(homogeneous_ATT == FALSE & ipw == FALSE & is.null(reg_weights)){
     flog.info("Estimated heterogeneous case with OLS.")
+  } else if(homogeneous_ATT == FALSE & ipw == FALSE & (!(is.null(reg_weights)))){
+    flog.info("Estimated heterogeneous case with WLS.")
   } else if(homogeneous_ATT == TRUE & ipw == TRUE){
     flog.info("Estimated homogeneous case with WLS using IPW.")
-  } else{
+  } else if(homogeneous_ATT == TRUE & ipw == FALSE & is.null(reg_weights)){
     flog.info("Estimated homogeneous case with OLS.")
+  } else{
+    flog.info("Estimated homogeneous case with WLS.")
   }
 
   return(results)

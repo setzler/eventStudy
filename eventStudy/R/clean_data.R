@@ -17,7 +17,8 @@ ES_clean_data <- function(long_data,
                           control_subset_var=NA,
                           control_subset_event_time=NA,
                           never_treat_action = 'none',
-                          never_treat_val = NA) {
+                          never_treat_val = NA,
+                          reg_weights = NULL) {
 
   # Restriction based on supplied omitted_event_time
 
@@ -63,7 +64,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control <- list()
 
     possible_treated_control[[1]] <- long_data[relevant_subset == 1 & get(onset_time_var) == e,
-                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars)),
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights)),
                                               with = FALSE
                                               ]
     gc()
@@ -71,7 +72,7 @@ ES_clean_data <- function(long_data,
     possible_treated_control[[1]][, treated := 1]
 
     possible_treated_control[[2]] <- long_data[relevant_subset == 1 & between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
-                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars)),
+                                              na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights)),
                                               with = FALSE
                                               ]
 
@@ -151,7 +152,7 @@ ES_clean_data <- function(long_data,
     balanced_treated_control <- na.omit(balanced_treated_control)
     gc()
 
-    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
+    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")), with = FALSE]
     gc()
 
     balanced_treated_control <- NULL
@@ -200,7 +201,8 @@ ES_parallelize_trends <- function(long_data,
                                   unit_var,
                                   cal_time_var,
                                   onset_time_var,
-                                  anticipation = 0) {
+                                  anticipation = 0,
+                                  reg_weights = NULL) {
 
   cal_times <- long_data[, sort(unique(get(cal_time_var)))]
   min_cal_time <- min(cal_times)
@@ -209,9 +211,17 @@ ES_parallelize_trends <- function(long_data,
 
   lm_formula_input <- paste(c(sprintf("factor(%s)", cal_time_var), sprintf("factor(%s)*%s", onset_time_var, cal_time_var)), collapse = "+")
 
-  est <- lm(as.formula(paste0(eval(outcomevar), " ~ ", lm_formula_input)),
-            data = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)]
-            )
+  if(!(is.null(reg_weights))){
+    est <- lm(as.formula(paste0(eval(outcomevar), " ~ ", lm_formula_input)),
+              data = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)],
+              model = FALSE, weights = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)][[reg_weights]]
+    )
+  } else{
+    est <- lm(as.formula(paste0(eval(outcomevar), " ~ ", lm_formula_input)),
+              data = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)],
+              model = FALSE
+    )
+  }
   gc()
 
   results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
@@ -246,7 +256,8 @@ ES_residualize_covariates <- function(long_data,
                                       onset_time_var,
                                       discrete_covars = NULL,
                                       cont_covars = NULL,
-                                      anticipation = 0) {
+                                      anticipation = 0,
+                                      reg_weights = NULL) {
 
   start_cols <- copy(colnames(long_data))
 
@@ -296,10 +307,17 @@ ES_residualize_covariates <- function(long_data,
 
   }
 
-  est <- lm(as.formula(paste0(eval(outcomevar), "~", formula_input)),
-            data = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)],
-            model = FALSE
-  )
+  if(!(is.null(reg_weights))){
+    est <- lm(as.formula(paste0(eval(outcomevar), "~", formula_input)),
+              data = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)],
+              model = FALSE, weights = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)][[reg_weights]]
+    )
+  } else{
+    est <- lm(as.formula(paste0(eval(outcomevar), "~", formula_input)),
+              data = long_data[get(cal_time_var) < (get(onset_time_var) - anticipation)],
+              model = FALSE
+    )
+  }
   gc()
 
   results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
@@ -311,7 +329,7 @@ ES_residualize_covariates <- function(long_data,
 
     for(var in cont_covars){
       loading = results[rn == var]$Estimate
-      long_data[, outcome := outcome - (loading*get(var))]
+      long_data[, (outcomevar) := get(outcomevar) - (loading*get(var))]
     }
   }
 
