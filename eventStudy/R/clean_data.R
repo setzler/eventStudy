@@ -55,7 +55,7 @@ ES_clean_data <- function(long_data,
     last_treat_grp_time <- max_onset_time - min_control_gap
   }
 
-  for (e in min_onset_time:last_treat_grp_time) {
+  for (e in intersect(min_onset_time:last_treat_grp_time, onset_times)) {
 
     j <- j + 1
 

@@ -16,6 +16,7 @@ ES_estimate_ATT <- function(ES_data,
                             ) {
 
   onset_times <- sort(unique(ES_data[, .N, by = eval(onset_time_var)][[onset_time_var]]))
+  ref_onset_times <- sort(unique(ES_data[, .N, by = list(ref_onset_time)][["ref_onset_time"]]))
   min_onset_time <- min(onset_times)
   max_onset_time <- max(onset_times)
 
@@ -62,7 +63,7 @@ ES_estimate_ATT <- function(ES_data,
 
   if (homogeneous_ATT == FALSE) {
 
-    for (h in min(ES_data$ref_onset_time):max(ES_data$ref_onset_time)) {
+    for (h in intersect((min(ES_data$ref_onset_time):max(ES_data$ref_onset_time)), ref_onset_times)) {
       for (r in setdiff(min(ES_data[ref_onset_time == h]$ref_event_time):max(ES_data[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
         var <- sprintf("ref_onset_time%s_catt%s", h, r)
         ES_data[, (var) := as.integer(ref_onset_time == h & ref_event_time == r & get(onset_time_var) == h)]
