@@ -5,7 +5,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
                control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
                residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
-               homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL){
+               homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL, require_balanced_control_diff = TRUE){
 
   flog.info("Beginning ES.")
 
@@ -108,7 +108,9 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     gc()
   } else if(never_treat_action %in% c('keep', 'only')){
     # assign the never-treated a unique onset time that ensures they are always part of the control group
-    never_treat_val <- max( max(long_data[[onset_time_var]], na.rm = TRUE), max(long_data[[cal_time_var]], na.rm = TRUE))  + 1
+    never_treat_val <- max(max(long_data[[onset_time_var]], na.rm = TRUE),
+                           max(long_data[[cal_time_var]], na.rm = TRUE)
+                           ) + min_control_gap + anticipation + 1
     long_data[is.na(get(onset_time_var)), (onset_time_var) := never_treat_val]
   }
 
@@ -119,7 +121,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
 
   # Check that there exist cohorts with observations at omitted_event_time
-  if(is.infinite(suppressWarnings(min(long_data[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])))){
+  if(is.infinite(suppressWarnings(long_data[get(cal_time_var) - get(onset_time_var) == omitted_event_time, min(get(onset_time_var))]))){
     stop(sprintf("Variable onset_time_var='%s' has no treated groups with observations at pre-treatment event time %s.",onset_time_var, omitted_event_time))
   }
 

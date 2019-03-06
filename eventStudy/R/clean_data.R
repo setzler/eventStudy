@@ -18,11 +18,12 @@ ES_clean_data <- function(long_data,
                           control_subset_event_time=NA,
                           never_treat_action = 'none',
                           never_treat_val = NA,
-                          reg_weights = NULL) {
+                          reg_weights = NULL,
+                          require_balanced_control_diff = TRUE) {
 
   # Restriction based on supplied omitted_event_time
 
-  min_eligible_cohort <- min(long_data[get(cal_time_var) - get(onset_time_var) == omitted_event_time][[onset_time_var]])
+  min_eligible_cohort <- long_data[get(cal_time_var) - get(onset_time_var) == omitted_event_time, min(get(onset_time_var))]
   long_data[, relevant_subset := as.integer(get(onset_time_var) >= min_eligible_cohort)]
   gc()
 
@@ -45,12 +46,16 @@ ES_clean_data <- function(long_data,
   # sequence of treated cohorts based on user choices
   # will start with min_onset_time
 
-  # last possible treated cohort:
-  # a) if there are cohorts treated after the end of the panel, determined by max_cal_time and min_control_gap
-  # b) if last onset is before end of panel, determined by max_onset_time, max_cal_time, and min_control_gap
+  # Last possible treated cohort:
+  # a) If there are cohorts treated after the end of the panel, determined by max_cal_time and min_control_gap
+  # b) If last onset is before end of panel, determined by max_onset_time, max_cal_time, and min_control_gap
+  # c) If there are never-winners, by construction, max_onset_time > max_cal_time irrespective of a) or b) above;
+  #     however, only want the min_control_gap to bind to the not-yet treated
 
-  if (max_onset_time > max_cal_time) {
+  if (max_onset_time > max_cal_time & !(never_treat_action %in% c('keep', 'only'))) {
     last_treat_grp_time <- max_cal_time - (min_control_gap - 1)
+  } else if (max_onset_time > max_cal_time & (never_treat_action %in% c('keep', 'only'))) {
+    last_treat_grp_time <- max_cal_time
   } else if (max_onset_time <= max_cal_time) {
     last_treat_grp_time <- max_onset_time - min_control_gap
   }
@@ -103,7 +108,7 @@ ES_clean_data <- function(long_data,
     # gc()
 
     # Key step -- making sure to only use control groups pre-treatment and treated groups where there are control observations
-    max_control_cohort <- max(possible_treated_control[[onset_time_var]])
+    # max_control_cohort <- max(possible_treated_control[[onset_time_var]])
     possible_treated_control <- possible_treated_control[(treated == 1)  | ((treated == 0) & (get(cal_time_var) < get(onset_time_var) - anticipation))]
 
     max_control_year <- possible_treated_control[treated == 0, max(get(cal_time_var))]
