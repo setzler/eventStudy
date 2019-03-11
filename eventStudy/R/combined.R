@@ -7,6 +7,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
                homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL, require_balanced_control_diff = TRUE){
 
+
   flog.info("Beginning ES.")
 
   # type checks
@@ -186,9 +187,75 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = mean(get(outcomevar)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
   }
 
+  # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
+  if(!(is.null(reg_weights))){
+    # STILL TBD
+  } else{
+    ES_treat_count_V1 <- ES_data[treated == 1,list(treat_count_V1 = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+  }
+  # omitted_event_time is excluded, so let's ensure it is excluded from the above as well
+  ES_treat_count_V1 <- ES_treat_count_V1[ref_event_time != omitted_event_time]
+
+  # collect count of treated+control units by each (ref_onset_time, ref_event_time) for V2 of population-weighted ATTs
+  if(!(is.null(reg_weights))){
+    # STILL TBD
+  } else{
+    ES_treat_count_V2 <- ES_data[,list(treat_count_V2 = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+  }
+  # omitted_event_time is excluded, so let's ensure it is excluded from the above as well
+  ES_treat_count_V2 <- ES_treat_count_V2[ref_event_time != omitted_event_time]
+
   # export
   figdata <- rbindlist(list(ES_results_hetero, ES_results_homo, ES_treatcontrol_means), use.names = TRUE, fill=TRUE)
+
+  # calculate unweighted and V1/V2 weighted means
+  ES_treat_count_V1[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
+  ES_treat_count_V2[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
+  figdata <- merge(figdata, ES_treat_count_V1, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+  figdata <- merge(figdata, ES_treat_count_V2, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+
+  subsets_for_avgs <- figdata[rn %in% c("catt")]
+  subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, weight_V1 := treat_count_V1 / sum(treat_count_V1, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, weight_V2 := treat_count_V2 / sum(treat_count_V2, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = weight_V1, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = weight_V2, na.rm = TRUE), by = list(ref_event_time)]
+
+  # merge weights into figdata
+  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, weight_V1, weight_V2)]
+  figdata <- merge(figdata, weights, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+
+  # rbind the (un)weighted avg estimates to figdata much like the "Pooled" data
+  subsets_for_avgs[, rowid := seq_len(.N), by = list(ref_event_time)]
+  subsets_for_avgs <- subsets_for_avgs[rowid == 1 | is.na(rowid)]
+
+  unweighted <- subsets_for_avgs[, list(ref_event_time, unweighted_estimate)]
+  unweighted[, ref_onset_time := "Equally-Weighted"]
+  unweighted[, rn := "att"]
+  setnames(unweighted, c("unweighted_estimate"), c("estimate"))
+  setorderv(unweighted, c("ref_event_time"))
+
+  weighted_V1 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V1)]
+  weighted_V1[, ref_onset_time := "Cohort-Weighted"]
+  weighted_V1[, rn := "att"]
+  setnames(weighted_V1, c("weighted_estimate_V1"), c("estimate"))
+  setorderv(weighted_V1, c("ref_event_time"))
+
+  weighted_V2 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V2)]
+  weighted_V2[, ref_onset_time := "Cohort-Weighted V2"]
+  weighted_V2[, rn := "att"]
+  setnames(weighted_V2, c("weighted_estimate_V2"), c("estimate"))
+  setorderv(weighted_V2, c("ref_event_time"))
+
+  figdata <- rbindlist(list(figdata, unweighted, weighted_V1, weighted_V2), use.names = TRUE, fill=TRUE)
   figdata[is.na(cluster_se), cluster_se := 0]
+
+  subsets_for_avgs <- NULL
+  weights <- NULL
+  unweighted <- NULL
+  weighted_V1 <- NULL
+  weighted_V2 <- NULL
+  gc()
 
   flog.info('ES is finished.')
   return(figdata)
