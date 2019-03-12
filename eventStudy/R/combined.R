@@ -189,7 +189,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
   if(!(is.null(reg_weights))){
-    # STILL TBD
+    # to revisit
+    ES_treat_count_V1 <- ES_data[treated == 1,list(treat_count_V1 = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   } else{
     ES_treat_count_V1 <- ES_data[treated == 1,list(treat_count_V1 = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   }
@@ -198,7 +199,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
   # collect count of treated+control units by each (ref_onset_time, ref_event_time) for V2 of population-weighted ATTs
   if(!(is.null(reg_weights))){
-    # STILL TBD
+    # to revisit
+    ES_treat_count_V2 <- ES_data[,list(treat_count_V2 = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   } else{
     ES_treat_count_V2 <- ES_data[,list(treat_count_V2 = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   }
