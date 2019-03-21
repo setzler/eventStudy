@@ -297,8 +297,10 @@ ES_make_ipw_dt <- function(did_dt,
       for(d in discrete_covars){
         d_name <- sprintf("%s_pre", d)
         did_dt[, has_d_pre := max(as.integer((!is.na(get(d))) * (ref_event_time == omitted_event_time))), by = list(get(unit_var))]
-        did_dt[has_d_pre == 1, (d_name) := max(get(d) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
+        did_dt <- did_dt[has_d_pre == 1] # these will be the only obs used anyway when estimating the propensity score
+        did_dt[, (d_name) := max(get(d) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
         did_dt[, has_d_pre := NULL]
+        gc()
         pre_discrete_covars = c(pre_discrete_covars, d_name)
       }
 
@@ -316,8 +318,10 @@ ES_make_ipw_dt <- function(did_dt,
       for(c in cont_covars){
         c_name <- sprintf("%s_pre", c)
         did_dt[, has_c_pre := max(as.integer((!is.na(get(c))) * (ref_event_time == omitted_event_time))), by = list(get(unit_var))]
-        did_dt[has_c_pre == 1, (c_name) := max(get(c) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
+        did_dt <- did_dt[has_c_pre == 1]  # these will be the only obs used anyway when estimating the propensity score
+        did_dt[, (c_name) := max(get(c) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
         did_dt[, has_c_pre := NULL]
+        gc()
         pre_cont_covars = c(pre_cont_covars, c_name)
       }
 
