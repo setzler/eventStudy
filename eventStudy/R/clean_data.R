@@ -187,16 +187,16 @@ ES_clean_data <- function(long_data,
     gc()
   }
 
-  flog.info(sprintf("Successfully produced a stacked dataset with %s rows.",
-                    format(dim(stack_across_cohorts_balanced_treated_control)[1], scientific = FALSE, big.mark = ","))
-            )
-
   if(never_treat_action == 'only'){
     rm(never_treat_val)
   }
 
   long_data[, relevant_subset := NULL]
   gc()
+
+  flog.info(sprintf("Successfully produced a stacked dataset with %s rows.",
+                    format(dim(stack_across_cohorts_balanced_treated_control)[1], scientific = FALSE, big.mark = ","))
+            )
 
   return(stack_across_cohorts_balanced_treated_control)
 }

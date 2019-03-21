@@ -22,7 +22,16 @@ ES_estimate_ATT <- function(ES_data,
 
   ES_data[, ref_onset_ref_event_time := .GRP, by = list(ref_onset_time, ref_event_time)]
   ES_data[, unit_sample := .GRP, by = list(get(onset_time_var), catt_specific_sample, ref_onset_time)]
-  ES_data[, cluster_on_this := .GRP, by = cluster_vars]
+  if(!(is.null(cluster_vars))){
+    ES_data[, cluster_on_this := .GRP, by = cluster_vars]
+    cluster_on_this <- "cluster_on_this"
+    results_se_col_name <- "Cluster s.e."
+  } else{
+      # White / robust SEs
+      cluster_on_this <- 0
+      results_se_col_name <- "Robust s.e"
+      # ^^ Note: not a typo -- when not clustering, summary(felm_object, robust = TRUE) returns with name "Robust s.e" missing period after "e"
+  }
 
   if(residualize_covariates == FALSE & ipw == FALSE){
 
@@ -59,6 +68,30 @@ ES_estimate_ATT <- function(ES_data,
 
   }
 
+  if(ipw == TRUE){
+
+    if(ipw_composition_change == FALSE){
+
+      # Construct ATT weights
+      # For ipw_composition_change == TRUE case, will make them as part of ES_make_ipw_dt
+
+      ES_data[treated == 1, pw := 1]
+      ES_data[treated == 0, pw := (pr / (1 - pr))]
+
+      # Pre-processing some issues of numerical precision
+      ES_data[pw < 0, pw := 0]
+
+      # This would be the place to add additional assumptions
+      # E.g., restrict to propensity scores strictly between 0 and 1
+
+      ES_data[, pr_subset := as.integer(between(pr, 0, 1, incbounds = FALSE))]
+      gc()
+    } else{
+      ES_data[, pr_subset := 1L]
+    }
+
+  }
+
   start_cols <- copy(colnames(ES_data))
 
   if (homogeneous_ATT == FALSE) {
@@ -79,39 +112,24 @@ ES_estimate_ATT <- function(ES_data,
 
     if(ipw == TRUE){
 
-      if(ipw_composition_change == FALSE){
-        # Construct ATT weights and estimate WLS
-        # For ipw_composition_change == TRUE case, make them as part of ES_clean_data
-
-        ES_data[treated == 1, weight := 1]
-        ES_data[treated == 0, weight := (pr / (1 - pr))]
-
-        # This would be the place to add additional assumptions
-        # E.g., restrict to propensity scores strictly between 0 and 1
-
-        ES_data[, pr_subset := as.integer(between(pr, 0, 1, incbounds = FALSE))]
-        gc()
-      } else{
-        ES_data[, pr_subset := 1L]
+      if(!(is.null(reg_weights))){
+        ES_data[pr_subset == 1, pw := pw * get(reg_weights)]
       }
 
-      # Pre-processing some issues of numerical precision
-      ES_data[weight < 0, weight := 0]
-
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = ES_data[pr_subset == 1], weights = ES_data[pr_subset == 1]$weight,
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
+                  data = ES_data[pr_subset == 1], weights = ES_data[pr_subset == 1]$pw,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
 
     } else if(residualize_covariates == TRUE){
 
       if(!(is.null(reg_weights))){
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       } else{
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
@@ -123,27 +141,33 @@ ES_estimate_ATT <- function(ES_data,
       fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
 
       if(!(is.null(reg_weights))){
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       } else{
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       }
     }
 
-    ES_data <- NULL
-    gc()
+    # Grabbing the estimates and vcov to produce weighted avg SEs
+    catt_coefs <- coef(est)
+    if(!(is.null(cluster_vars))){
+      catt_vcov <- est$clustervcv
+    } else{
+      catt_vcov <- est$robustvcv
+    }
+
 
     results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
     est <- NULL
     gc()
     results[!grepl("ref\\_onset\\_time", rn), e := min_onset_time]
     results[, rn := gsub("lead", "-", rn)]
-    for (c in min_onset_time:(max_onset_time - 1)) {
+    for (c in min_onset_time:max_onset_time) {
       results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), e := c]
       results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_et", c), "et", rn)]
       results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
@@ -169,39 +193,24 @@ ES_estimate_ATT <- function(ES_data,
 
     if(ipw == TRUE){
 
-      if(ipw_composition_change == FALSE){
-        # Construct ATT weights and estimate WLS
-        # For ipw_composition_change == TRUE case, make them as part of ES_clean_data
-
-        ES_data[treated == 1, weight := 1]
-        ES_data[treated == 0, weight := (pr / (1 - pr))]
-
-        # This would be the place to add additional assumptions
-        # E.g., restrict to propensity scores strictly between 0 and 1
-
-        ES_data[, pr_subset := as.integer(between(pr, 0, 1, incbounds = FALSE))]
-        gc()
-      } else{
-        ES_data[, pr_subset := 1L]
+      if(!(is.null(reg_weights))){
+        ES_data[pr_subset == 1, pw := pw * get(reg_weights)]
       }
 
-      # Pre-processing some issues of numerical precision
-      ES_data[weight < 0, weight := 0]
-
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
-                  data = ES_data[pr_subset == 1], weights = ES_data[pr_subset == 1]$weight,
+      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
+                  data = ES_data[pr_subset == 1], weights = ES_data[pr_subset == 1]$pw,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
 
     } else if(residualize_covariates == TRUE){
 
       if(!(is.null(reg_weights))){
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       } else{
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | cluster_on_this")),
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
@@ -213,12 +222,12 @@ ES_estimate_ATT <- function(ES_data,
       fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
 
       if(!(is.null(reg_weights))){
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       } else{
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | cluster_on_this")),
+        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
@@ -226,8 +235,9 @@ ES_estimate_ATT <- function(ES_data,
 
     }
 
-    ES_data <- NULL
-    gc()
+    # Don't need to grab the estimates and vcov for this homogeneous case, so just do NAs for symmetry
+    catt_coefs <- NA
+    catt_vcov <- NA
 
     results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
     est <- NULL
@@ -239,7 +249,7 @@ ES_estimate_ATT <- function(ES_data,
     results[, rn := "att"]
   }
   setnames(results, c("e"), onset_time_var)
-  setnames(results, c("Estimate", "Cluster s.e."), c("estimate", "cluster_se"))
+  setnames(results, c("Estimate", results_se_col_name), c("estimate", "cluster_se"))
   setnames(results,"Pr(>|t|)","pval")
   results[, pval := round(pval,8)]
 
@@ -257,7 +267,168 @@ ES_estimate_ATT <- function(ES_data,
     flog.info("Estimated homogeneous case with WLS.")
   }
 
-  return(results)
+  output = list()
+  output[[1]] <- results
+  output[[2]] <- catt_coefs
+  output[[3]] <- catt_vcov
+
+  return(output)
+}
+
+#' @export
+ES_make_ipw_dt <- function(did_dt,
+                           unit_var,
+                           cal_time_var,
+                           discrete_covars = NULL,
+                           cont_covars = NULL,
+                           omitted_event_time = -2,
+                           reg_weights = NULL,
+                           ipw_model = "linear",
+                           ipw_composition_change = FALSE){
+
+  if(ipw_composition_change == FALSE){
+
+    # Construct 'pre' version of each covariate, which will be time-invariant in did_dt
+
+    if(!is.null(discrete_covars)){
+
+      pre_discrete_covars = c()
+
+      for(d in discrete_covars){
+        d_name <- sprintf("%s_pre", d)
+        did_dt[, has_d_pre := max(as.integer((!is.na(get(d))) * (ref_event_time == omitted_event_time))), by = list(get(unit_var))]
+        did_dt[has_d_pre == 1, (d_name) := max(get(d) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
+        did_dt[, has_d_pre := NULL]
+        pre_discrete_covars = c(pre_discrete_covars, d_name)
+      }
+
+      pre_discrete_covar_formula_input = paste0("factor(", na.omit(pre_discrete_covars), ")", collapse = "+")
+      rm(d_name)
+    } else{
+      pre_discrete_covars = NA
+      pre_discrete_covar_formula_input = NA
+    }
+
+    if(!is.null(cont_covars)){
+
+      pre_cont_covars = c()
+
+      for(c in cont_covars){
+        c_name <- sprintf("%s_pre", c)
+        did_dt[, has_c_pre := max(as.integer((!is.na(get(c))) * (ref_event_time == omitted_event_time))), by = list(get(unit_var))]
+        did_dt[has_c_pre == 1, (c_name) := max(get(c) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
+        did_dt[, has_c_pre := NULL]
+        pre_cont_covars = c(pre_cont_covars, c_name)
+      }
+
+      pre_cont_covar_formula_input = paste0(na.omit(pre_cont_covars), collapse = "+")
+      rm(c_name)
+    } else{
+      pre_cont_covars = NA
+      pre_cont_covar_formula_input = NA
+    }
+
+    if(is.na(pre_discrete_covar_formula_input)){
+      formula_input <- pre_cont_covar_formula_input
+    } else if(is.na(pre_cont_covar_formula_input)){
+      formula_input <- pre_discrete_covar_formula_input
+    } else{
+      formula_input <- paste(pre_discrete_covar_formula_input,
+                             pre_cont_covar_formula_input,
+                             sep = "+"
+      )
+    }
+
+    # Now impose common support
+    # Can revisit -- for now take a simplified approach
+    # Form strata using the discrete covariates (if present)
+    # Rely solely on parametric model for continuous covariates
+
+    if(!is.null(discrete_covars)){
+      did_dt[, strata := .GRP, by = c(pre_discrete_covars)]
+      treat_strata <- did_dt[treated == 1, sort(unique(strata))]
+      control_strata <- did_dt[treated == 0, sort(unique(strata))]
+      common_strata <- intersect(treat_strata, control_strata)
+      did_dt <- did_dt[strata %in% common_strata]
+      gc()
+    }
+
+    if(ipw_model == "linear"){
+      if(!is.null(reg_weights)){
+        did_dt[, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),data = did_dt, weights = did_dt[[reg_weights]]), type = "response")]
+      } else{
+        did_dt[, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),data = did_dt), type = "response")]
+      }
+    } else if(ipw_model %in% c("logit", "probit")){
+      if(!is.null(reg_weights)){
+        did_dt[, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input)),family = quasibinomial(link = ipw_model), data = did_dt, weights = did_dt[[reg_weights]]), type = "response")]
+      } else{
+        did_dt[, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input)),family = quasibinomial(link = ipw_model), data = did_dt), type = "response")]
+      }
+    }
+
+    # # TO DELETE - TEST
+    #
+    # did_dt[treated == 1, pw := 1]
+    # did_dt[treated == 0, pw := (pr / (1-pr))]
+    #
+    # if(!(is.null(reg_weights))){
+    #   did_dt[, pw := pw * get(reg_weights)]
+    # }
+    #
+    # if(is.na(pre_discrete_covar_formula_input)){
+    #   for(c in cont_covars){
+    #     c_name <- sprintf("%s_pre", c)
+    #     balance <- did_dt[, list(weighted_mean = weighted.mean(get(c_name), pw)),
+    #                       by = list(ref_onset_time, catt_specific_sample, treated)
+    #                       ]
+    #     balance_wide <- dcast(balance, ref_onset_time + catt_specific_sample ~ treated, value.var = "weighted_mean")
+    #     setnames(balance_wide, c("0", "1"), c("control", "treat"))
+    #     print(balance)
+    #     print(sprintf("For ref_onset_time='%s' & catt_specific_sample='%s', are T/C balanced on %s? %s",
+    #                   balance_wide$ref_onset_time[1], balance_wide$catt_specific_sample[1], c, all.equal(balance_wide$control[1], balance_wide$treat[1], tol = 10^-13))
+    #     )
+    #     rm(balance, balance_wide, c_name)
+    #   }
+    # } else if(is.na(pre_cont_covar_formula_input)){
+    #   for(d in discrete_covars){
+    #     d_name <- sprintf("%s_pre", d)
+    #     balance <- did_dt[, list(weighted_mean = weighted.mean(get(d_name), pw)),
+    #                       by = list(ref_onset_time, catt_specific_sample, treated)
+    #                       ]
+    #     balance_wide <- dcast(balance, ref_onset_time + catt_specific_sample ~ treated, value.var = "weighted_mean")
+    #     setnames(balance_wide, c("0", "1"), c("control", "treat"))
+    #     print(balance)
+    #     print(sprintf("For ref_onset_time='%s' & catt_specific_sample='%s', are T/C balanced on %s? %s",
+    #                   balance_wide$ref_onset_time[1], balance_wide$catt_specific_sample[1], d, all.equal(balance_wide$control[1], balance_wide$treat[1], tol = 10^-13))
+    #     )
+    #     rm(balance, balance_wide, d_name)
+    #   }
+    # } else{
+    #   for(v in c(discrete_covars, cont_covars)){
+    #     v_name <- sprintf("%s_pre", v)
+    #     balance <- did_dt[, list(weighted_mean = weighted.mean(get(v_name), pw)),
+    #                       by = list(ref_onset_time, catt_specific_sample, treated)
+    #                       ]
+    #     balance_wide <- dcast(balance, ref_onset_time + catt_specific_sample ~ treated, value.var = "weighted_mean")
+    #     setnames(balance_wide, c("0", "1"), c("control", "treat"))
+    #     print(balance)
+    #     print(sprintf("For ref_onset_time='%s' & catt_specific_sample='%s', are T/C balanced on %s? %s",
+    #                   balance_wide$ref_onset_time[1], balance_wide$catt_specific_sample[1], v, all.equal(balance_wide$control[1], balance_wide$treat[1], tol = 10^-13))
+    #     )
+    #     rm(balance, balance_wide, v_name)
+    #   }
+    # }
+    #
+    # # END TO DELETE
+
+    rm(pre_discrete_covar_formula_input, pre_cont_covar_formula_input, formula_input)
+    new_cols <- setdiff(colnames(did_dt), c(unit_var, cal_time_var, "pr"))
+    did_dt[, (new_cols) := NULL]
+    gc()
+  }
+
+  return(did_dt)
 }
 
 
