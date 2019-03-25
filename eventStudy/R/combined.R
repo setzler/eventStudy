@@ -338,9 +338,11 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   for(et in event_times){
 
     if(et < 0){
-      lookfor <- sprintf("cattlead%s", abs(et))
+      lookfor <- sprintf("cattlead%s$", abs(et))
+      # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
     } else{
-      lookfor <- sprintf("catt%s", abs(et))
+      lookfor <- sprintf("catt%s$", abs(et))
+      # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
     }
     coef_indices <- grep(lookfor, names(catt_coefs))
     rm(lookfor)
