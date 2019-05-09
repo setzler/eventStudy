@@ -60,16 +60,16 @@ ES_clean_data <- function(long_data,
     last_treat_grp_time <- max_onset_time - min_control_gap
   }
 
-  for (e in intersect(min_onset_time:last_treat_grp_time, onset_times)) {
+  for (event_cohort in intersect(min_onset_time:last_treat_grp_time, onset_times)) {
 
     # Depending on the structure of the data and choices of min_control_gap / max_control_g, it possible that no control group exists for 'e'
     # E.g., if treated cohorts are 2001, 2002, 2004, 2005 and min_control_gap = max_control_gap = 1, the 2002 has no control group
     # Will skip such a treated cohort at this stage
 
-    count_potential_controls <- dim(long_data[relevant_subset == 1 & between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE)])[1]
+    count_potential_controls <- dim(long_data[relevant_subset == 1 & between(get(onset_time_var), event_cohort + min_control_gap, event_cohort + max_control_gap, incbounds = TRUE)])[1]
     if(count_potential_controls <= 0){
       flog.info(sprintf("Given min_control_gap='%s' & max_control_gap='%s', no control units found for %s='%s'",
-                        min_control_gap, max_control_gap, onset_time_var, e)
+                        min_control_gap, max_control_gap, onset_time_var, event_cohort)
       )
     } else{
 
@@ -79,15 +79,15 @@ ES_clean_data <- function(long_data,
       # For a given treated cohort, possible_treated_control is the subset of possible treated and control observations
       possible_treated_control <- list()
 
-      possible_treated_control[[1]] <- long_data[relevant_subset == 1 & get(onset_time_var) == e,
+      possible_treated_control[[1]] <- long_data[relevant_subset == 1 & get(onset_time_var) == event_cohort,
                                                  unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights))),
                                                  with = FALSE
                                                  ]
       gc()
-      possible_treated_control[[1]][, ref_onset_time := e]
+      possible_treated_control[[1]][, ref_onset_time := event_cohort]
       possible_treated_control[[1]][, treated := 1]
 
-      possible_treated_control[[2]] <- long_data[relevant_subset == 1 & between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
+      possible_treated_control[[2]] <- long_data[relevant_subset == 1 & between(get(onset_time_var), event_cohort + min_control_gap, event_cohort + max_control_gap, incbounds = TRUE),
                                                  unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights))),
                                                  with = FALSE
                                                  ]
@@ -120,7 +120,9 @@ ES_clean_data <- function(long_data,
 
       # Key step -- making sure to only use control groups pre-treatment and treated groups where there are control observations
       # max_control_cohort <- max(possible_treated_control[[onset_time_var]])
-      possible_treated_control <- possible_treated_control[(treated == 1)  | ((treated == 0) & (get(cal_time_var) < get(onset_time_var) - anticipation))]
+      if(event_vs_noevent==FALSE){
+        possible_treated_control <- possible_treated_control[(treated == 1)  | ((treated == 0) & (get(cal_time_var) < get(onset_time_var) - anticipation))]
+      }
 
       max_control_year <- possible_treated_control[treated == 0, max(get(cal_time_var))]
       possible_treated_control <- possible_treated_control[get(cal_time_var) <= max_control_year]
@@ -138,7 +140,7 @@ ES_clean_data <- function(long_data,
       temp <- NULL
       gc()
 
-      for (t in setdiff(years, omitted_event_time)) { # excluding focal cohort's omitted_event_time -- recall, panel such that all cohorts have omitted_event_time
+      for (time_since_event in setdiff(years, omitted_event_time)) { # excluding focal cohort's omitted_event_time -- recall, panel such that all cohorts have omitted_event_time
 
         i <- i + 1
 
@@ -146,11 +148,11 @@ ES_clean_data <- function(long_data,
         # treated group: (get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t))
         # treated group: this says onset time must be the current value of e (e is the reference cohort currently under consideration) and then considers only reference event time and outcome event time "t"
 
-        if (t < 1 | event_vs_noevent==TRUE) {
-          balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t)) | (get(onset_time_var) > e & ref_event_time %in% c(omitted_event_time, t))]
+        if (time_since_event < 1 | event_vs_noevent==TRUE) {
+          balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == event_cohort & ref_event_time %in% c(omitted_event_time, time_since_event)) | (get(onset_time_var) > event_cohort & ref_event_time %in% c(omitted_event_time, time_since_event))]
           gc()
-        } else if (t >= 1) {
-          balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t)) | (get(onset_time_var) > (e + t) & ref_event_time %in% c(omitted_event_time, t))]
+        } else if (time_since_event >= 1) {
+          balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == event_cohort & ref_event_time %in% c(omitted_event_time, time_since_event)) | (get(onset_time_var) > (event_cohort + time_since_event) & ref_event_time %in% c(omitted_event_time, time_since_event))]
           gc()
         }
         # Code above ensures that I don't continue using the "omitted_event_time" observations for the control group after it
