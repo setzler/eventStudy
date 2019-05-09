@@ -18,8 +18,7 @@ ES_clean_data <- function(long_data,
                           control_subset_event_time=NA,
                           never_treat_action = 'none',
                           never_treat_val = NA,
-                          reg_weights = NULL,
-                          require_balanced_control_diff = TRUE) {
+                          reg_weights = NULL) {
 
   # Restriction based on supplied omitted_event_time
 
@@ -62,106 +61,120 @@ ES_clean_data <- function(long_data,
 
   for (e in intersect(min_onset_time:last_treat_grp_time, onset_times)) {
 
-    j <- j + 1
+    # Depending on the structure of the data and choices of min_control_gap / max_control_g, it possible that no control group exists for 'e'
+    # E.g., if treated cohorts are 2001, 2002, 2004, 2005 and min_control_gap = max_control_gap = 1, the 2002 has no control group
+    # Will skip such a treated cohort at this stage
+
+    count_potential_controls <- dim(long_data[relevant_subset == 1 & between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE)])[1]
+    if(count_potential_controls <= 0){
+      flog.info(sprintf("Given min_control_gap='%s' & max_control_gap='%s', no control units found for %s='%s'",
+                        min_control_gap, max_control_gap, onset_time_var, e)
+      )
+    } else{
+
+      j <- j + 1
 
 
-    # For a given treated cohort, possible_treated_control is the subset of possible treated and control observations
-    possible_treated_control <- list()
+      # For a given treated cohort, possible_treated_control is the subset of possible treated and control observations
+      possible_treated_control <- list()
 
-    possible_treated_control[[1]] <- long_data[relevant_subset == 1 & get(onset_time_var) == e,
-                                              unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights))),
-                                              with = FALSE
-                                              ]
-    gc()
-    possible_treated_control[[1]][, ref_onset_time := e]
-    possible_treated_control[[1]][, treated := 1]
-
-    possible_treated_control[[2]] <- long_data[relevant_subset == 1 & between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
-                                              unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights))),
-                                              with = FALSE
-                                              ]
-
-    if(never_treat_action == 'only'){
-      # will only form control groups using the never-treated units (so excluding the not-yet treated)
-      possible_treated_control[[2]] <- possible_treated_control[[2]][get(onset_time_var) == never_treat_val]
-    }
-
-    gc()
-    possible_treated_control[[2]][, ref_onset_time := e]
-    possible_treated_control[[2]][, treated := 0]
-
-    possible_treated_control <- rbindlist(possible_treated_control, use.names = TRUE)
-    gc()
-
-    possible_treated_control[, ref_event_time := get(cal_time_var) - ref_onset_time]
-
-    # # Key step -- making sure to only use control groups pre-treatment
-    # possible_treated_control <- possible_treated_control[treated == 1 | treated == 0 & get(cal_time_var) < get(onset_time_var)]
-    # gc()
-
-    # # Key step -- making sure to only use control groups pre-treatment
-    # possible_treated_control <- possible_treated_control[treated == 1 | treated == 0 & get(cal_time_var) < get(onset_time_var)- (min_control_gap - 1)]
-    # gc()
-
-    # # Key step -- making sure to only use control groups pre-treatment
-    # possible_treated_control <- possible_treated_control[treated == 1 & get(cal_time_var) <= min(max_cal_time, max_onset_time) - (min_control_gap - 1) | treated == 0 & get(cal_time_var) < get(onset_time_var)- (min_control_gap - 1)]
-    # gc()
-
-    # Key step -- making sure to only use control groups pre-treatment and treated groups where there are control observations
-    # max_control_cohort <- max(possible_treated_control[[onset_time_var]])
-    possible_treated_control <- possible_treated_control[(treated == 1)  | ((treated == 0) & (get(cal_time_var) < get(onset_time_var) - anticipation))]
-
-    max_control_year <- possible_treated_control[treated == 0, max(get(cal_time_var))]
-    possible_treated_control <- possible_treated_control[get(cal_time_var) <= max_control_year]
-
-    gc()
-
-    i <- 0
-
-    # For a given cohort-specific ATT, balanced_treated_control is the subset of possible treated and control observations
-    # that are valid in the sense that the same cohorts are used for both the pre and post differences that form the DiD.
-    balanced_treated_control <- list()
-
-    temp <- possible_treated_control[, .N, by = "ref_event_time"]
-    years <- sort(unique(temp$ref_event_time))
-    temp <- NULL
-    gc()
-
-    for (t in setdiff(years, omitted_event_time)) { # excluding focal cohort's omitted_event_time -- recall, panel such that all cohorts have omitted_event_time
-
-      i <- i + 1
-
-      if (t < 1) {
-        balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t)) | (get(onset_time_var) > e & ref_event_time %in% c(omitted_event_time, t))]
-        gc()
-      } else if (t >= 1) {
-        balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t)) | (get(onset_time_var) > (e + t) & ref_event_time %in% c(omitted_event_time, t))]
-        gc()
-      }
-      # Code above ensures that I don't continue using the "omitted_event_time" observations for the control group after it
-      # has become treated
-
-      balanced_treated_control[[i]] <- na.omit(balanced_treated_control[[i]])
+      possible_treated_control[[1]] <- long_data[relevant_subset == 1 & get(onset_time_var) == e,
+                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights))),
+                                                 with = FALSE
+                                                 ]
       gc()
-      balanced_treated_control[[i]][, catt_specific_sample := i]
+      possible_treated_control[[1]][, ref_onset_time := e]
+      possible_treated_control[[1]][, treated := 1]
+
+      possible_treated_control[[2]] <- long_data[relevant_subset == 1 & between(get(onset_time_var), e + min_control_gap, e + max_control_gap, incbounds = TRUE),
+                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights))),
+                                                 with = FALSE
+                                                 ]
+
+      if(never_treat_action == 'only'){
+        # will only form control groups using the never-treated units (so excluding the not-yet treated)
+        possible_treated_control[[2]] <- possible_treated_control[[2]][get(onset_time_var) == never_treat_val]
+      }
+
+      gc()
+      possible_treated_control[[2]][, ref_onset_time := e]
+      possible_treated_control[[2]][, treated := 0]
+
+      possible_treated_control <- rbindlist(possible_treated_control, use.names = TRUE)
+      gc()
+
+      possible_treated_control[, ref_event_time := get(cal_time_var) - ref_onset_time]
+
+      # # Key step -- making sure to only use control groups pre-treatment
+      # possible_treated_control <- possible_treated_control[treated == 1 | treated == 0 & get(cal_time_var) < get(onset_time_var)]
+      # gc()
+
+      # # Key step -- making sure to only use control groups pre-treatment
+      # possible_treated_control <- possible_treated_control[treated == 1 | treated == 0 & get(cal_time_var) < get(onset_time_var)- (min_control_gap - 1)]
+      # gc()
+
+      # # Key step -- making sure to only use control groups pre-treatment
+      # possible_treated_control <- possible_treated_control[treated == 1 & get(cal_time_var) <= min(max_cal_time, max_onset_time) - (min_control_gap - 1) | treated == 0 & get(cal_time_var) < get(onset_time_var)- (min_control_gap - 1)]
+      # gc()
+
+      # Key step -- making sure to only use control groups pre-treatment and treated groups where there are control observations
+      # max_control_cohort <- max(possible_treated_control[[onset_time_var]])
+      possible_treated_control <- possible_treated_control[(treated == 1)  | ((treated == 0) & (get(cal_time_var) < get(onset_time_var) - anticipation))]
+
+      max_control_year <- possible_treated_control[treated == 0, max(get(cal_time_var))]
+      possible_treated_control <- possible_treated_control[get(cal_time_var) <= max_control_year]
+
+      gc()
+
+      i <- 0
+
+      # For a given cohort-specific ATT, balanced_treated_control is the subset of possible treated and control observations
+      # that are valid in the sense that the same cohorts are used for both the pre and post differences that form the DiD.
+      balanced_treated_control <- list()
+
+      temp <- possible_treated_control[, .N, by = "ref_event_time"]
+      years <- sort(unique(temp$ref_event_time))
+      temp <- NULL
+      gc()
+
+      for (t in setdiff(years, omitted_event_time)) { # excluding focal cohort's omitted_event_time -- recall, panel such that all cohorts have omitted_event_time
+
+        i <- i + 1
+
+        if (t < 1) {
+          balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t)) | (get(onset_time_var) > e & ref_event_time %in% c(omitted_event_time, t))]
+          gc()
+        } else if (t >= 1) {
+          balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t)) | (get(onset_time_var) > (e + t) & ref_event_time %in% c(omitted_event_time, t))]
+          gc()
+        }
+        # Code above ensures that I don't continue using the "omitted_event_time" observations for the control group after it
+        # has become treated
+
+        balanced_treated_control[[i]] <- na.omit(balanced_treated_control[[i]])
+        gc()
+        balanced_treated_control[[i]][, catt_specific_sample := i]
+
+      }
+
+      possible_treated_control <- NULL
+      gc()
+
+      # Now let's get all of these in one stacked data set specific to cohort e
+      # Will build up from the pieces of the prior step together with a catt_specific_sample dummy
+
+      balanced_treated_control <- rbindlist(balanced_treated_control, use.names = TRUE)
+      balanced_treated_control <- na.omit(balanced_treated_control)
+      gc()
+
+      stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated"))), with = FALSE]
+      gc()
+
+      balanced_treated_control <- NULL
+      gc()
 
     }
 
-    possible_treated_control <- NULL
-    gc()
-
-    # Now let's get all of these in one stacked data set specific to cohort e
-    # Will build up from the pieces of the prior step together with a catt_specific_sample dummy
-
-    balanced_treated_control <- rbindlist(balanced_treated_control, use.names = TRUE)
-    balanced_treated_control <- na.omit(balanced_treated_control)
-    gc()
-
-    stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, cluster_vars, discrete_covars, cont_covars, reg_weights, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated"))), with = FALSE]
-    gc()
-
-    balanced_treated_control <- NULL
-    gc()
   }
 
   # All years and cohorts at once
@@ -171,12 +184,15 @@ ES_clean_data <- function(long_data,
   if(!is.na(treated_subset_var) & is.na(control_subset_var)){
     stack_across_cohorts_balanced_treated_control[, valid_treated_group := max(as.integer(get(treated_subset_var)*(ref_event_time==treated_subset_event_time))), by=c(unit_var, "ref_onset_time")]
     stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[treated==0 | valid_treated_group==1]
+    stack_across_cohorts_balanced_treated_control[, valid_treated_group := NULL] # this variable is no longer needed
     gc()
   }
 
   if(!is.na(control_subset_var) & is.na(treated_subset_var)){
     stack_across_cohorts_balanced_treated_control[, valid_control_group := max(as.integer(get(control_subset_var)*(ref_event_time==control_subset_event_time))), by=c(unit_var, "ref_onset_time")]
     stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1  | treated==1 ]
+    stack_across_cohorts_balanced_treated_control[, valid_control_group := NULL] # this variable is no longer needed
+
     gc()
   }
 
@@ -184,6 +200,7 @@ ES_clean_data <- function(long_data,
     stack_across_cohorts_balanced_treated_control[, valid_treated_group := max(as.integer(get(treated_subset_var)*(ref_event_time==treated_subset_event_time))), by=c(unit_var, "ref_onset_time")]
     stack_across_cohorts_balanced_treated_control[, valid_control_group := max(as.integer(get(control_subset_var)*(ref_event_time==control_subset_event_time))), by=c(unit_var, "ref_onset_time")]
     stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1  | (treated==1 & valid_treated_group==1) ]
+    stack_across_cohorts_balanced_treated_control[, c("valid_treated_group", "valid_control_group") := NULL] # these variables are no longer needed
     gc()
   }
 
@@ -229,7 +246,7 @@ ES_parallelize_trends <- function(long_data,
   }
   gc()
 
-  results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+  results <- data.table(rn = names(est$coefficients), estimate = est$coefficients)
   est <- NULL
   gc()
   results <- results[grep("\\:", rn)]
@@ -237,8 +254,7 @@ ES_parallelize_trends <- function(long_data,
   results[, rn := gsub(sprintf("\\:%s", gsub("\\_", "", cal_time_var)), "", rn)]
   results[, rn := gsub(sprintf("factor\\(%s\\)", gsub("\\_", "", onset_time_var)), "", rn)]
   results[, rn := as.integer(rn)]
-  results <- results[, list(rn, Estimate)]
-  setnames(results, c("rn", "Estimate"), c(onset_time_var, "pre_slope"))
+  setnames(results, c("rn", "estimate"), c(onset_time_var, "pre_slope"))
 
   long_data <- merge(long_data, results, by = onset_time_var, all.x = TRUE)
   long_data[!is.na(pre_slope), (outcomevar) := get(outcomevar) - ((get(cal_time_var) - min_cal_time) * pre_slope)]
@@ -325,7 +341,7 @@ ES_residualize_covariates <- function(long_data,
   }
   gc()
 
-  results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+  results <- data.table(rn = names(est$coefficients), estimate = est$coefficients)
   est <- NULL
   gc()
 
@@ -333,7 +349,7 @@ ES_residualize_covariates <- function(long_data,
   if(!is.null(cont_covars)){
 
     for(var in cont_covars){
-      loading = results[rn == var]$Estimate
+      loading = results[rn == var]$estimate
       long_data[, (outcomevar) := get(outcomevar) - (loading*get(var))]
     }
   }
@@ -342,20 +358,20 @@ ES_residualize_covariates <- function(long_data,
 
     for(var in discrete_covars){
       results[rn == "(Intercept)", (var) := as.integer(reference_lookup[varname == var]$reference_level)]
-      append = data.table(Estimate = 0)
+      append = data.table(estimate = 0)
       append[, (var) := as.integer(reference_lookup[varname == var]$reference_level)]
       results = rbindlist(list(results, append), use.names = TRUE, fill = TRUE)
       results[grep(sprintf("relevel\\(as\\.factor\\(%s\\), ref =", var), rn), (var) := as.integer(gsub('.*[)]', "", rn))]
     }
 
     # at this stage, want to break apart the intercept and other factor levels
-    intercept <- results[rn == "(Intercept)"]$Estimate
-    results <- results[is.na(rn) | rn != "(Intercept)", c("Estimate", discrete_covars), with = FALSE]
+    intercept <- results[rn == "(Intercept)"]$estimate
+    results <- results[is.na(rn) | rn != "(Intercept)", c("estimate", discrete_covars), with = FALSE]
 
     pre_intercepts = c()
     for(var in discrete_covars){
-      results_for_merge <- results[, c("Estimate", var), with = FALSE]
-      setnames(results_for_merge, c("Estimate"), sprintf("pre_%s", var))
+      results_for_merge <- results[, c("estimate", var), with = FALSE]
+      setnames(results_for_merge, c("estimate"), sprintf("pre_%s", var))
       results_for_merge <- na.omit(results_for_merge)
       long_data <- merge(long_data, results_for_merge, by = var, all.x = TRUE)
       pre_intercepts = c(pre_intercepts, sprintf("pre_%s", var))

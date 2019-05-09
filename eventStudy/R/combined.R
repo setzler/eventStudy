@@ -1,11 +1,12 @@
 #' @export
 ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
-               control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
-               residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
-               homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL, require_balanced_control_diff = TRUE,
+               control_subset_var=NA, control_subset_event_time=0,
+               treated_subset_var=NA, treated_subset_event_time=0,
+               fill_zeros=FALSE, residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
+               homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL, add_unit_fes = FALSE,
                bootstrapES = FALSE, bootstrap_iters = 1,
-               ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE){
+               ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_data = FALSE){
 
   flog.info("Beginning ES.")
 
@@ -28,6 +29,10 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     assertCharacter(control_subset_var,len=1)
   }
   assertIntegerish(control_subset_event_time,len=1)
+  if(!is.na(treated_subset_var)){
+    assertCharacter(treated_subset_var,len=1)
+  }
+  assertIntegerish(treated_subset_event_time,len=1)
   assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
   assertFlag(residualize_covariates)
@@ -38,6 +43,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
   assertFlag(homogeneous_ATT)
   assertIntegerish(num_cores,len=1,lower=1)
+  assertFlag(add_unit_fes)
   assertFlag(bootstrapES)
   assertIntegerish(bootstrap_iters,len=1,lower=1)
   assertFlag(ipw)
@@ -63,6 +69,10 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     if(!(control_subset_var %in% names(long_data))){stop(sprintf("Variable control_subset_var='%s' is not in the long_data you provided.",control_subset_var))}
     if(!(long_data[,typeof(get(control_subset_var))]=="logical")){stop(sprintf("Variable control_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var))}
   }
+  if(!is.na(treated_subset_var)){
+    if(!(treated_subset_var %in% names(long_data))){stop(sprintf("Variable treated_subset_var='%s' is not in the long_data you provided.",treated_subset_var))}
+    if(!(long_data[,typeof(get(treated_subset_var))]=="logical")){stop(sprintf("Variable treated_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var))}
+  }
   if(testCharacter(discrete_covars)){
     for(vv in discrete_covars){
       if(!(vv %in% names(long_data))){stop(sprintf("Variable discrete_covars='%s' is not in the long_data you provided.",vv))}
@@ -81,12 +91,12 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   design_vars <- c(cal_time_var, onset_time_var)
   if(testCharacter(discrete_covars)){
     for(vv in discrete_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable discrete_covars='%s' is among %s, which are already controlled in the design.",vv))}
+      if(vv %in% design_vars){stop(sprintf("Variable discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, cal_time_var, onset_time_var))}
     }
   }
   if(testCharacter(cont_covars)){
     for(vv in cont_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable cont_covars='%s' is among %s, which are already controlled in the design.",vv))}
+      if(vv %in% design_vars){stop(sprintf("Variable cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, cal_time_var, onset_time_var))}
     }
   }
 
@@ -172,6 +182,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                            anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
                            control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
+                           treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val,
                            cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights)
 
@@ -203,10 +214,16 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
         ES_data <- merge(ES_data, ipw_dt, by = c(unit_var, cal_time_var, "did_id"), all.x = TRUE, sort = FALSE)
         ES_data[is.na(pr_temp) & !is.na(pr), pr_temp := pr]
         ES_data[, pr := NULL]
+        ipw_dt <- NULL
         gc()
       }
 
       setnames(ES_data, "pr_temp", "pr")
+
+      if(ipw_data == TRUE){
+        ipw_dt <- ES_data[, list(get(unit_var), ref_onset_time, ref_event_time, catt_specific_sample, treated, pr)]
+        setnames(ipw_dt, "V1", unit_var)
+      }
 
     }
   }
@@ -215,6 +232,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   if(homogeneous_ATT == FALSE){
     ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data,
                                          outcomevar=outcomevar,
+                                         unit_var = unit_var,
                                          onset_time_var = onset_time_var,
                                          cluster_vars = cluster_vars,
                                          homogeneous_ATT = homogeneous_ATT,
@@ -224,7 +242,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                          residualize_covariates = residualize_covariates,
                                          reg_weights = reg_weights,
                                          ipw = ipw,
-                                         ipw_composition_change = ipw_composition_change)
+                                         ipw_composition_change = ipw_composition_change,
+                                         add_unit_fes = add_unit_fes)
 
     catt_coefs <- ES_results_hetero[[2]]
     catt_vcov <- ES_results_hetero[[3]]
@@ -237,6 +256,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
   ES_results_homo <- ES_estimate_ATT(ES_data = ES_data,
                                      outcomevar=outcomevar,
+                                     unit_var = unit_var,
                                      onset_time_var = onset_time_var,
                                      cluster_vars = cluster_vars,
                                      homogeneous_ATT = TRUE,
@@ -246,7 +266,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                      residualize_covariates = residualize_covariates,
                                      reg_weights = reg_weights,
                                      ipw = ipw,
-                                     ipw_composition_change = ipw_composition_change)[[1]]
+                                     ipw_composition_change = ipw_composition_change,
+                                     add_unit_fes = add_unit_fes)[[1]]
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect levels by treatment/control
@@ -327,7 +348,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   # calculate SEs for weighted avg estimates using catt_coefs and catt_vcov
   # the unique "Weighted" ref_event_time values represent the target list of parameters
   # for each such ref_event_time, want to extract the location (number) of the relevant parameters in catt_coefs
-  # then will need to grab the relevant weight, and then construct the formula to supply to deltamethod()
+  # then will need to grab the relevant weight, and then construct the formula to supply to delta_method()
 
   event_times <- setdiff(figdata[, sort(unique(ref_event_time))], omitted_event_time)
   onset_times <- as.integer(figdata[rn == "catt", sort(unique(ref_onset_time))])
@@ -373,19 +394,19 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     cohort_w_v2_g_formula_input = paste0(temp$cohort_w_v2_formula_entry, collapse = "+")
 
     figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Equally-Weighted",
-            cluster_se := deltamethod(g = as.formula(paste("~", equal_w_g_formula_input)),
+            cluster_se := delta_method(g = as.formula(paste("~", equal_w_g_formula_input)),
                                       mean = catt_coefs, cov = catt_vcov, ses = TRUE
             )
             ]
 
     figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted",
-            cluster_se := deltamethod(g = as.formula(paste("~", cohort_w_v1_g_formula_input)),
+            cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v1_g_formula_input)),
                                       mean = catt_coefs, cov = catt_vcov, ses = TRUE
             )
             ]
 
     figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted V2",
-            cluster_se := deltamethod(g = as.formula(paste("~", cohort_w_v2_g_formula_input)),
+            cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v2_g_formula_input)),
                                       mean = catt_coefs, cov = catt_vcov, ses = TRUE
             )
             ]
@@ -412,11 +433,12 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                                  long_data = orig_sample, outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var,
                                                  onset_time_var = onset_time_var, cluster_vars = cluster_vars, omitted_event_time= omitted_event_time,
                                                  anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap,
-                                                 linearize_pretrends = linearize_pretrends, control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
+                                                 linearize_pretrends = linearize_pretrends,
+                                                 control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
+                                                 treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
                                                  fill_zeros = fill_zeros, residualize_covariates = residualize_covariates, discrete_covars = discrete_covars, cont_covars = cont_covars,
-                                                 never_treat_action = never_treat_action, homogeneous_ATT = homogeneous_ATT, reg_weights = reg_weights,
-                                                 require_balanced_control_diff = require_balanced_control_diff,
-                                                 ipw = ipw, ipw_model = ipw_model, ipw_composition_change = ipw_composition_change),
+                                                 never_treat_action = never_treat_action, homogeneous_ATT = homogeneous_ATT, reg_weights = reg_weights, add_unit_fes = add_unit_fes,
+                                                 ipw = ipw, ipw_model = ipw_model, ipw_composition_change = ipw_composition_change, ipw_data = FALSE),
                               use.names = TRUE
                               )
 
@@ -430,6 +452,10 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
 
   flog.info('ES is finished.')
+
+  if(ipw_data == TRUE){
+    figdata <- rbindlist(list(figdata, ipw_dt), use.names = TRUE, fill = TRUE)
+  }
 
   return(figdata)
 }
@@ -509,6 +535,173 @@ ES_plot_levels <- function(figdata, cohort_subset = NA, lower_event = -3, upper_
 }
 
 #' @export
+ES_plot_ipw <- function(figdata,
+                        pooled = FALSE,
+                        cohort_subset = NA,
+                        event_time_subset = NA,
+                        type = 'density',
+                        binwidth = 0.01,
+                        align = "vertical",
+                        omitted_event_time = -2){
+
+  # figdata <- copy(res1a)
+  # type <- 'density'
+  # cohort_subset = 2001
+  # binwidth = 0.01
+
+  # As this function changes the underlying results data and figdata tends to be a small file, make a copy now
+  figdata_temp <- copy(figdata)
+
+  figdata_temp <- figdata_temp[!is.na(pr) & ref_event_time != omitted_event_time, list(ref_onset_time, ref_event_time, catt_specific_sample, treated, pr)]
+  figdata_temp[, ref_onset_time :=  as.integer(as.character(ref_onset_time))]
+  figdata_temp[, ref_event_time := as.integer(as.character(ref_event_time))]
+  figdata_temp[treated==1, treatment := "Treatment"]
+  figdata_temp[treated==0, treatment := "Control"]
+  figdata_temp[, treatment := factor(treatment,levels=c("Control","Treatment"))]
+
+  if(pooled == TRUE){
+    if(align == "overlap"){
+      if(type == 'density'){
+        gg <- ggplot(figdata_temp, aes(x=pr)) +
+          geom_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 0], color = 'black', show.legend = FALSE) +
+          stat_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 0], color = 'black', geom = "line", position = "identity", size = 0) +
+          geom_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 1], color = 'black', show.legend = FALSE) +
+          stat_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 1], color = 'black', geom = "line", position = "identity", size = 0) +
+          theme_bw(base_size = 12) +
+          labs(x = "Estimated Propensity", y = "Density", linetype = "Group") +
+          scale_x_continuous(limits = c(0,1), breaks = pretty_breaks()) +
+          guides(linetype = guide_legend(override.aes = list(size = 1)))
+      } else if(type == "histogram"){
+        gg <- ggplot(figdata_temp, aes(x=pr)) +
+          scale_fill_grey(start = 0.5, end = 1) +
+          geom_histogram(aes(y=..density.., fill=factor(treatment)), binwidth = binwidth, data = figdata_temp[treated == 0], color = NA) +
+          geom_histogram(aes(y=..density.., fill=factor(treatment)), binwidth = binwidth, data = figdata_temp[treated == 1], color = 'black', alpha = 0) +
+          theme_bw(base_size = 12) +
+          labs(x = "Estimated Propensity", y = "Density", fill = "Group") +
+          scale_x_continuous(breaks = pretty_breaks()) +
+          coord_cartesian(xlim = c(0,1))
+      }
+    } else if(align == "vertical"){
+      if(type == 'density'){
+        gg <- ggplot(figdata_temp, aes(x=pr)) +
+          geom_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 0], color = 'black', show.legend = FALSE) +
+          stat_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 0], color = 'black', geom = "line", position = "identity", size = 0) +
+          geom_density(aes(y = -..density.., linetype = factor(treatment)), data = figdata_temp[treated == 1], color = 'black', show.legend = FALSE) +
+          stat_density(aes(y = -..density.., linetype = factor(treatment)), data = figdata_temp[treated == 1], color = 'black', geom = "line", position = "identity", size = 0) +
+          theme_bw(base_size = 12) +
+          labs(x = "Estimated Propensity", y = "Density", linetype = "Group") +
+          scale_x_continuous(limits = c(0,1), breaks = pretty_breaks()) +
+          guides(linetype = guide_legend(override.aes = list(size = 1)))
+      } else if(type == "histogram"){
+        gg <- ggplot(figdata_temp, aes(x=pr)) +
+          scale_fill_grey(start = 0.5, end = 1) +
+          geom_histogram(aes(y=..density.., fill=factor(treatment)), binwidth = binwidth, data = figdata_temp[treated == 0], color = 'white') +
+          geom_histogram(aes(y= - ..density.., fill=factor(treatment)), binwidth = binwidth, data = figdata_temp[treated == 1], color = 'black') +
+          theme_bw(base_size = 12) +
+          labs(x = "Estimated Propensity", y = "Density", fill = "Group") +
+          scale_x_continuous(breaks = pretty_breaks()) +
+          coord_cartesian(xlim = c(0,1))
+      }
+    }
+  } else{
+
+    if(!is.na(cohort_subset)){
+      figdata_temp <- figdata_temp[ref_onset_time %in% cohort_subset]
+    }
+
+    if(!is.na(event_time_subset)){
+      figdata_temp <- figdata_temp[ref_event_time %in% event_time_subset]
+    }
+
+    if(align == "overlap"){
+      if(type == 'density'){
+        gg <- ggplot(figdata_temp, aes(x=pr)) +
+          geom_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 0], color = 'black', show.legend = FALSE) +
+          stat_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 0], color = 'black', geom = "line", position = "identity", size = 0) +
+          geom_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 1], color = 'black', show.legend = FALSE) +
+          stat_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 1], color = 'black', geom = "line", position = "identity", size = 0) +
+          theme_bw(base_size = 12) +
+          labs(x = "Estimated Propensity", y = "Density", linetype = "Group") +
+          scale_x_continuous(limits = c(0,1), breaks = pretty_breaks()) +
+          facet_wrap(~ref_onset_time, scales = c("free")) +
+          guides(linetype = guide_legend(override.aes = list(size = 1)))
+      } else if(type == "histogram"){
+        gg <- ggplot(figdata_temp, aes(x=pr)) +
+          scale_fill_grey(start = 0.5, end = 1) +
+          geom_histogram(aes(y=..density.., fill=factor(treatment)), binwidth = binwidth, data = figdata_temp[treated == 0], color = NA) +
+          geom_histogram(aes(y=..density.., fill=factor(treatment)), binwidth = binwidth, data = figdata_temp[treated == 1], color = 'black', alpha = 0) +
+          theme_bw(base_size = 12) +
+          labs(x = "Estimated Propensity", y = "Density", fill = "Group") +
+          scale_x_continuous(breaks = pretty_breaks()) +
+          facet_wrap(~ref_onset_time, scales = c("free")) +
+          coord_cartesian(xlim = c(0,1))
+      }
+    } else if(align == "vertical"){
+      if(type == 'density'){
+        gg <- ggplot(figdata_temp, aes(x=pr)) +
+          geom_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 0], color = 'black', show.legend = FALSE) +
+          stat_density(aes(y = ..density.., linetype = factor(treatment)), data = figdata_temp[treated == 0], color = 'black', geom = "line", position = "identity", size = 0) +
+          geom_density(aes(y = -..density.., linetype = factor(treatment)), data = figdata_temp[treated == 1], color = 'black', show.legend = FALSE) +
+          stat_density(aes(y = -..density.., linetype = factor(treatment)), data = figdata_temp[treated == 1], color = 'black', geom = "line", position = "identity", size = 0) +
+          theme_bw(base_size = 12) +
+          labs(x = "Estimated Propensity", y = "Density", linetype = "Group") +
+          scale_x_continuous(limits = c(0,1), breaks = pretty_breaks()) +
+          facet_wrap(~ref_onset_time, scales = c("free")) +
+          guides(linetype = guide_legend(override.aes = list(size = 1)))
+      } else if(type == "histogram"){
+        gg <- ggplot(figdata_temp, aes(x=pr)) +
+          scale_fill_grey(start = 0.5, end = 1) +
+          geom_histogram(aes(y=..density.., fill=factor(treatment)), binwidth = binwidth, data = figdata_temp[treated == 0], color = 'white') +
+          geom_histogram(aes(y= - ..density.., fill=factor(treatment)), binwidth = binwidth, data = figdata_temp[treated == 1], color = 'black') +
+          theme_bw(base_size = 12) +
+          labs(x = "Estimated Propensity", y = "Density", fill = "Group") +
+          scale_x_continuous(breaks = pretty_breaks()) +
+          facet_wrap(~ref_onset_time, scales = c("free")) +
+          coord_cartesian(xlim = c(0,1))
+      }
+    }
+
+  }
+
+  return(gg)
+
+}
+
+# Adapted near-verbatim from 'msm' package
+# g         # a formula or list of formulae (functions) giving the transformation g(x) in terms of x1, x2,  etc
+# mean      # mean, MLE, or other consistent plug-in estimate of x
+# cov       # covariance matrix of x
+# ses=TRUE  # return standard errors, else return covariance matrix
+#' @export
+delta_method <- function (g, mean, cov, ses = TRUE) {
+  ## Var (G(x))  =  D_g * Var(X) * t(D_g)
+  cov <- as.matrix(cov)
+  n <- length(mean)
+  if (!is.list(g)){
+    g <- list(g)
+  }
+  if ((dim(cov)[1] != n) || (dim(cov)[2] != n)){
+    stop(print(sprintf("'cov' is a %s X %s matrix, but should be a square %s X %s matrix.", dim(cov)[1], dim(cov)[2], n, n)))
+  }
+  syms <- paste("x", 1:n, sep = "")
+  for (i in 1:n) assign(syms[i], mean[i])
+  D_g <- t(sapply(g, function(form) {
+    ## 1) differentiate each formula in the list
+    ## 2) evaluate at the supplied estimated / plug-in value
+    ## 3) take these elements and make Jacobian row-by-row
+    as.numeric(attr(eval(deriv(form, syms)), "gradient"))
+  }))
+  new.covar <- D_g %*% cov %*% t(D_g)
+  if (ses == TRUE) {
+    result <- sqrt(diag(new.covar))
+  } else{
+    result <- new.covar
+  }
+
+  return(result)
+}
+
+#' @export
 block_sample <- function(long_data, unit_var, cal_time_var){
   # Thanks (without implicating) to Michael Graber for sharing this function
   # vector of unique cluster IDs and total number of clusters
@@ -544,10 +737,11 @@ block_sample <- function(long_data, unit_var, cal_time_var){
 #' @export
 bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                          omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
-                         control_subset_var=NA, control_subset_event_time=0, fill_zeros=FALSE,
+                         control_subset_var=NA, control_subset_event_time=0, treated_subset_var=NA, treated_subset_event_time=0,
+                         fill_zeros=FALSE,
                          residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
-                         homogeneous_ATT = FALSE, reg_weights = NULL, require_balanced_control_diff = TRUE,
-                         ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE,
+                         homogeneous_ATT = FALSE, reg_weights = NULL, add_unit_fes = FALSE,
+                         ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_data = FALSE,
                          iter){
 
 
@@ -574,6 +768,10 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     assertCharacter(control_subset_var,len=1)
   }
   assertIntegerish(control_subset_event_time,len=1)
+  if(!is.na(treated_subset_var)){
+    assertCharacter(treated_subset_var,len=1)
+  }
+  assertIntegerish(treated_subset_event_time,len=1)
   assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
   assertFlag(residualize_covariates)
@@ -583,6 +781,7 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     }
   }
   assertFlag(homogeneous_ATT)
+  assertFlag(add_unit_fes)
   assertFlag(ipw)
   assertFlag(ipw_composition_change)
 
@@ -605,6 +804,10 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   if(!is.na(control_subset_var)){
     if(!(control_subset_var %in% names(bs_long_data))){stop(sprintf("Variable control_subset_var='%s' is not in the bs_long_data you provided.",control_subset_var))}
     if(!(bs_long_data[,typeof(get(control_subset_var))]=="logical")){stop(sprintf("Variable control_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var))}
+  }
+  if(!is.na(treated_subset_var)){
+    if(!(treated_subset_var %in% names(bs_long_data))){stop(sprintf("Variable treated_subset_var='%s' is not in the bs_long_data you provided.",treated_subset_var))}
+    if(!(bs_long_data[,typeof(get(treated_subset_var))]=="logical")){stop(sprintf("Variable treated_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var))}
   }
   if(testCharacter(discrete_covars)){
     for(vv in discrete_covars){
@@ -702,6 +905,7 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                            unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                            anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
                            control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
+                           treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val,
                            cluster_vars = NULL, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights)
 
@@ -745,6 +949,7 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   if(homogeneous_ATT == FALSE){
     ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data,
                                          outcomevar=outcomevar,
+                                         unit_var = unit_var,
                                          onset_time_var = onset_time_var,
                                          cluster_vars = NULL,
                                          homogeneous_ATT = homogeneous_ATT,
@@ -754,13 +959,15 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                                          residualize_covariates = residualize_covariates,
                                          reg_weights = reg_weights,
                                          ipw = ipw,
-                                         ipw_composition_change = ipw_composition_change)[[1]]
+                                         ipw_composition_change = ipw_composition_change,
+                                         add_unit_fes = add_unit_fes)[[1]]
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
     ES_results_hetero = NULL
   }
   ES_results_homo <- ES_estimate_ATT(ES_data = ES_data,
                                      outcomevar=outcomevar,
+                                     unit_var = unit_var,
                                      onset_time_var = onset_time_var,
                                      cluster_vars = NULL,
                                      homogeneous_ATT = TRUE,
@@ -770,7 +977,8 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                                      residualize_covariates = residualize_covariates,
                                      reg_weights = reg_weights,
                                      ipw = ipw,
-                                     ipw_composition_change = ipw_composition_change)[[1]]
+                                     ipw_composition_change = ipw_composition_change,
+                                     add_unit_fes = add_unit_fes)[[1]]
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs

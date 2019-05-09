@@ -3,6 +3,7 @@
 #' @export
 ES_estimate_ATT <- function(ES_data,
                             outcomevar,
+                            unit_var,
                             onset_time_var,
                             cluster_vars,
                             residualize_covariates = FALSE,
@@ -12,7 +13,8 @@ ES_estimate_ATT <- function(ES_data,
                             omitted_event_time = -2,
                             reg_weights = NULL,
                             ipw = FALSE,
-                            ipw_composition_change = FALSE
+                            ipw_composition_change = FALSE,
+                            add_unit_fes = FALSE
                             ) {
 
   onset_times <- sort(unique(ES_data[, .N, by = eval(onset_time_var)][[onset_time_var]]))
@@ -21,16 +23,20 @@ ES_estimate_ATT <- function(ES_data,
   max_onset_time <- max(onset_times)
 
   ES_data[, ref_onset_ref_event_time := .GRP, by = list(ref_onset_time, ref_event_time)]
-  ES_data[, unit_sample := .GRP, by = list(get(onset_time_var), catt_specific_sample, ref_onset_time)]
+
+  if(add_unit_fes == TRUE){
+    # balance the sample in the unit_var dimension
+    ES_data[, unit_sample := .GRP, by = list(get(unit_var), catt_specific_sample, ref_onset_time)]
+  } else{
+    # sample already balanced
+    ES_data[, unit_sample := .GRP, by = list(get(onset_time_var), catt_specific_sample, ref_onset_time)]
+  }
   if(!(is.null(cluster_vars))){
     ES_data[, cluster_on_this := .GRP, by = cluster_vars]
     cluster_on_this <- "cluster_on_this"
-    results_se_col_name <- "Cluster s.e."
   } else{
       # White / robust SEs
       cluster_on_this <- 0
-      results_se_col_name <- "Robust s.e"
-      # ^^ Note: not a typo -- when not clustering, summary(felm_object, robust = TRUE) returns with name "Robust s.e" missing period after "e"
   }
 
   if(residualize_covariates == FALSE & ipw == FALSE){
@@ -38,21 +44,22 @@ ES_estimate_ATT <- function(ES_data,
     if(!is.null(discrete_covars)){
 
       # For felm(), want to tell which factor combination will be sent to the intercept
-      # Let's set it to the min
+      # Let's set it to the (approximate) median
 
       i <- 0
       reference_lookup <- list()
       discrete_covar_formula_input <- c()
       for(var in discrete_covars){
         i <- i + 1
-        min_pre_value <- ES_data[, min(get(var))]
-        reference_lookup[[i]] <- data.table(varname = var, reference_level = as.character(min_pre_value))
+        levels <- sort(ES_data[, unique(get(var))])
+        median_pre_value <- levels[round(length(levels)/2)] # approximate median
+        reference_lookup[[i]] <- data.table(varname = var, reference_level = as.character(median_pre_value))
 
         discrete_covar_formula_input <- c(discrete_covar_formula_input,
-                                          sprintf("relevel(as.factor(%s), ref = '%s')", var, min_pre_value))
+                                          sprintf("relevel(as.factor(%s), ref = '%s')", var, median_pre_value))
 
         var <- NULL
-        min_pre_value <- NULL
+        median_pre_value <- NULL
       }
       reference_lookup <- rbindlist(reference_lookup, use.names = TRUE)
 
@@ -121,6 +128,9 @@ ES_estimate_ATT <- function(ES_data,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
 
+      unique_units <- ES_data[pr_subset == 1 & !is.na(pw), uniqueN(get(unit_var), na.rm = TRUE)]
+      gc()
+
     } else if(residualize_covariates == TRUE){
 
       if(!(is.null(reg_weights))){
@@ -128,11 +138,18 @@ ES_estimate_ATT <- function(ES_data,
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
+
+        unique_units <- ES_data[!is.na(reg_weights), uniqueN(get(unit_var), na.rm = TRUE)]
+        gc()
+
       } else{
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
+
+        unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
+        gc()
       }
 
     } else{
@@ -145,15 +162,24 @@ ES_estimate_ATT <- function(ES_data,
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
+
+        unique_units <- ES_data[!is.na(reg_weights), uniqueN(get(unit_var), na.rm = TRUE)]
+        gc()
+
       } else{
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
+
+        unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
+        gc()
+
       }
     }
 
     # Grabbing the estimates and vcov to produce weighted avg SEs
+    # Note: vcov already reflects weights used in estimation
     catt_coefs <- coef(est)
     if(!(is.null(cluster_vars))){
       catt_vcov <- est$clustervcv
@@ -161,8 +187,14 @@ ES_estimate_ATT <- function(ES_data,
       catt_vcov <- est$robustvcv
     }
 
+    if(!(is.null(cluster_vars))){
+      results <- data.table(rn = rownames(est$beta), estimate = as.vector(est$beta), cluster_se = est$cse, t = est$ctval, pval = est$cpval)
+    } else{
+      results <- data.table(rn = rownames(est$beta), estimate = as.vector(est$beta), cluster_se = est$rse, t = est$rtval, pval = est$rpval)
+    }
 
-    results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+    results[, reg_sample_size := est$N]
+    results[, reg_unique_units := unique_units]
     est <- NULL
     gc()
     results[!grepl("ref\\_onset\\_time", rn), e := min_onset_time]
@@ -202,6 +234,9 @@ ES_estimate_ATT <- function(ES_data,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
 
+      unique_units <- ES_data[pr_subset == 1 & !is.na(pw), uniqueN(get(unit_var), na.rm = TRUE)]
+      gc()
+
     } else if(residualize_covariates == TRUE){
 
       if(!(is.null(reg_weights))){
@@ -209,11 +244,20 @@ ES_estimate_ATT <- function(ES_data,
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
+
+        unique_units <- ES_data[!is.na(reg_weights), uniqueN(get(unit_var), na.rm = TRUE)]
+        gc()
+
+
       } else{
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
+
+        unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
+        gc()
+
       }
 
     } else{
@@ -226,11 +270,19 @@ ES_estimate_ATT <- function(ES_data,
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
+
+        unique_units <- ES_data[!is.na(reg_weights), uniqueN(get(unit_var), na.rm = TRUE)]
+        gc()
+
       } else{
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
+
+        unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
+        gc()
+
       }
 
     }
@@ -239,7 +291,14 @@ ES_estimate_ATT <- function(ES_data,
     catt_coefs <- NA
     catt_vcov <- NA
 
-    results <- as.data.table(summary(est, robust = TRUE)$coefficients, keep.rownames = TRUE)
+    if(!(is.null(cluster_vars))){
+      results <- data.table(rn = rownames(est$beta), estimate = as.vector(est$beta), cluster_se = est$cse, t = est$ctval, pval = est$cpval)
+    } else{
+      results <- data.table(rn = rownames(est$beta), estimate = as.vector(est$beta), cluster_se = est$rse, t = est$rtval, pval = est$rpval)
+    }
+
+    results[, reg_sample_size := est$N]
+    results[, reg_unique_units := unique_units]
     est <- NULL
     gc()
     results <- results[grep("att", rn)]
@@ -249,8 +308,6 @@ ES_estimate_ATT <- function(ES_data,
     results[, rn := "att"]
   }
   setnames(results, c("e"), onset_time_var)
-  setnames(results, c("Estimate", results_se_col_name), c("estimate", "cluster_se"))
-  setnames(results,"Pr(>|t|)","pval")
   results[, pval := round(pval,8)]
 
   if(homogeneous_ATT == FALSE & ipw == TRUE){
