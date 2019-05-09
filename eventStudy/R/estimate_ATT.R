@@ -9,6 +9,8 @@ ES_estimate_ATT <- function(ES_data,
                             residualize_covariates = FALSE,
                             discrete_covars = NULL,
                             cont_covars = NULL,
+                            ref_discrete_covars = NULL,
+                            ref_cont_covars = NULL,
                             homogeneous_ATT = TRUE,
                             omitted_event_time = -2,
                             reg_weights = NULL,
@@ -41,7 +43,7 @@ ES_estimate_ATT <- function(ES_data,
 
   if(residualize_covariates == FALSE & ipw == FALSE){
 
-    if(!is.null(discrete_covars)){
+    if((!is.null(discrete_covars)) | (!is.null(ref_discrete_covars)) ){
 
       # For felm(), want to tell which factor combination will be sent to the intercept
       # Let's set it to the (approximate) median
@@ -49,7 +51,7 @@ ES_estimate_ATT <- function(ES_data,
       i <- 0
       reference_lookup <- list()
       discrete_covar_formula_input <- c()
-      for(var in discrete_covars){
+      for(var in unique(na.omit(c(discrete_covars, ref_discrete_covars)))){
         i <- i + 1
         levels <- sort(ES_data[, unique(get(var))])
         median_pre_value <- levels[round(length(levels)/2)] # approximate median
@@ -67,8 +69,8 @@ ES_estimate_ATT <- function(ES_data,
       discrete_covar_formula_input = NA
     }
 
-    if(!is.null(cont_covars)){
-      cont_covar_formula_input = paste0(na.omit(cont_covars), collapse = "+")
+    if((!is.null(cont_covars)) | (!is.null(ref_cont_covars))){
+      cont_covar_formula_input = paste0(unique(na.omit(c(cont_covars, ref_cont_covars))), collapse = "+")
     } else{
       cont_covar_formula_input = NA
     }
