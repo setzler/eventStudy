@@ -18,7 +18,8 @@ ES_clean_data <- function(long_data,
                           control_subset_event_time=NA,
                           never_treat_action = 'none',
                           never_treat_val = NA,
-                          reg_weights = NULL) {
+                          reg_weights = NULL,
+                          event_vs_noevent = FALSE) {
 
   # Restriction based on supplied omitted_event_time
 
@@ -141,7 +142,11 @@ ES_clean_data <- function(long_data,
 
         i <- i + 1
 
-        if (t < 1) {
+        # note: the next selection step will have a selection for the treated group, then an "or" |, then the selection for the control group
+        # treated group: (get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t))
+        # treated group: this says onset time must be the current value of e (e is the reference cohort currently under consideration) and then considers only reference event time and outcome event time "t"
+
+        if (t < 1 | event_vs_noevent==TRUE) {
           balanced_treated_control[[i]] <- possible_treated_control[(get(onset_time_var) == e & ref_event_time %in% c(omitted_event_time, t)) | (get(onset_time_var) > e & ref_event_time %in% c(omitted_event_time, t))]
           gc()
         } else if (t >= 1) {
@@ -217,6 +222,10 @@ ES_clean_data <- function(long_data,
 
   return(stack_across_cohorts_balanced_treated_control)
 }
+
+
+
+
 
 ES_parallelize_trends <- function(long_data,
                                   outcomevar,
