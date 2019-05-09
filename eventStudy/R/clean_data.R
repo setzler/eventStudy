@@ -98,7 +98,7 @@ ES_clean_data <- function(long_data,
       }
 
       gc()
-      possible_treated_control[[2]][, ref_onset_time := e]
+      possible_treated_control[[2]][, ref_onset_time := event_cohort]
       possible_treated_control[[2]][, treated := 0]
 
       possible_treated_control <- rbindlist(possible_treated_control, use.names = TRUE)
