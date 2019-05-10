@@ -269,12 +269,21 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
         varname <- sprintf("%s_dyn", var)
 
         # Define the time-invariant outcome for all units within a ref_onset_time
-        ES_data[, (varname) := max(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
-
+        if(class(ES_data[[var]]) == "integer"){
+          # needed to include type checks as max() often converts from integer to numeric
+          ES_data[, (varname) := max(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        } else{
+          ES_data[, (varname) := max(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+        }
       } else{
 
         # Define the time-invariant outcome for all units within a ref_onset_time
-        ES_data[, (var) := max(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        if(class(ES_data[[var]]) == "integer"){
+          # needed to include type checks as max() often converts from integer to numeric
+          ES_data[, (var) := max(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        } else{
+          ES_data[, (var) := max(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+        }
 
       }
 
