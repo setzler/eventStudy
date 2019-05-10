@@ -208,7 +208,7 @@ ES_clean_data <- function(long_data,
   if(!is.na(control_subset_var) & !is.na(treated_subset_var)){
     stack_across_cohorts_balanced_treated_control[, valid_treated_group := max(as.integer(get(treated_subset_var)*(ref_event_time==treated_subset_event_time))), by=c(unit_var, "ref_onset_time")]
     stack_across_cohorts_balanced_treated_control[, valid_control_group := max(as.integer(get(control_subset_var)*(ref_event_time==control_subset_event_time))), by=c(unit_var, "ref_onset_time")]
-    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[valid_control_group==1  | (treated==1 & valid_treated_group==1) ]
+    stack_across_cohorts_balanced_treated_control <- stack_across_cohorts_balanced_treated_control[(treated==0 & valid_control_group==1)  | (treated==1 & valid_treated_group==1) ]
     stack_across_cohorts_balanced_treated_control[, c("valid_treated_group", "valid_control_group") := NULL] # these variables are no longer needed
     gc()
   }

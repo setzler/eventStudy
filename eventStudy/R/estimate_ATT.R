@@ -340,6 +340,8 @@ ES_make_ipw_dt <- function(did_dt,
                            cal_time_var,
                            discrete_covars = NULL,
                            cont_covars = NULL,
+                           ref_discrete_covars = NULL,
+                           ref_cont_covars = NULL,
                            omitted_event_time = -2,
                            reg_weights = NULL,
                            ipw_model = "linear",
@@ -349,11 +351,11 @@ ES_make_ipw_dt <- function(did_dt,
 
     # Construct 'pre' version of each covariate, which will be time-invariant in did_dt
 
-    if(!is.null(discrete_covars)){
+    if((!is.null(discrete_covars)) | (!is.null(ref_discrete_covars)) ){
 
       pre_discrete_covars = c()
 
-      for(d in discrete_covars){
+      for(d in unique(na.omit(c(discrete_covars, ref_discrete_covars)))){
         d_name <- sprintf("%s_pre", d)
         did_dt[, has_d_pre := max(as.integer((!is.na(get(d))) * (ref_event_time == omitted_event_time))), by = list(get(unit_var))]
         did_dt <- did_dt[has_d_pre == 1] # these will be the only obs used anyway when estimating the propensity score
@@ -370,11 +372,11 @@ ES_make_ipw_dt <- function(did_dt,
       pre_discrete_covar_formula_input = NA
     }
 
-    if(!is.null(cont_covars)){
+    if((!is.null(cont_covars)) | (!is.null(ref_cont_covars))){
 
       pre_cont_covars = c()
 
-      for(c in cont_covars){
+      for(c in unique(na.omit(c(cont_covars, ref_cont_covars)))){
         c_name <- sprintf("%s_pre", c)
         did_dt[, has_c_pre := max(as.integer((!is.na(get(c))) * (ref_event_time == omitted_event_time))), by = list(get(unit_var))]
         did_dt <- did_dt[has_c_pre == 1]  # these will be the only obs used anyway when estimating the propensity score
@@ -407,7 +409,7 @@ ES_make_ipw_dt <- function(did_dt,
     # Form strata using the discrete covariates (if present)
     # Rely solely on parametric model for continuous covariates
 
-    if(!is.null(discrete_covars)){
+    if((!is.null(discrete_covars)) | (!is.null(ref_discrete_covars)) ){
       did_dt[, strata := .GRP, by = c(pre_discrete_covars)]
       treat_strata <- did_dt[treated == 1, sort(unique(strata))]
       control_strata <- did_dt[treated == 0, sort(unique(strata))]

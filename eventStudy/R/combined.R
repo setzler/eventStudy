@@ -201,48 +201,6 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights, event_vs_noevent = event_vs_noevent,
                            ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars)
 
-  # estimate inverse probability weights, if relevant
-  if(ipw == TRUE){
-
-    # Within each DiD sample, estimate weights to balance provided covariates
-    ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
-    did_ids <- ES_data[, sort(unique(did_id))]
-
-    if(ipw_composition_change == FALSE){
-
-      ES_data[, pr_temp := as.numeric(NA)]
-
-      for(i in did_ids){
-
-        ipw_dt <- ES_make_ipw_dt(did_dt = copy(ES_data[did_id == i]),
-                                 unit_var = unit_var,
-                                 cal_time_var = cal_time_var,
-                                 discrete_covars = discrete_covars,
-                                 cont_covars = cont_covars,
-                                 omitted_event_time = omitted_event_time,
-                                 ipw_model = ipw_model,
-                                 reg_weights = reg_weights,
-                                 ipw_composition_change = ipw_composition_change
-        )
-        ipw_dt[, did_id := i]
-
-        ES_data <- merge(ES_data, ipw_dt, by = c(unit_var, cal_time_var, "did_id"), all.x = TRUE, sort = FALSE)
-        ES_data[is.na(pr_temp) & !is.na(pr), pr_temp := pr]
-        ES_data[, pr := NULL]
-        ipw_dt <- NULL
-        gc()
-      }
-
-      setnames(ES_data, "pr_temp", "pr")
-
-      if(ipw_data == TRUE){
-        ipw_dt <- ES_data[, list(get(unit_var), ref_onset_time, ref_event_time, catt_specific_sample, treated, pr)]
-        setnames(ipw_dt, "V1", unit_var)
-      }
-
-    }
-  }
-
   # construct discrete covariates specific to a ref_event_time
   # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
 
@@ -326,6 +284,50 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     # When these are used later in estimation, the loop is over unique values in the intersection of cont_covars and ref_cont_covars
     ref_cont_covars <- unique(na.omit(c(ref_cont_covars, setdiff(colnames(ES_data), start_cols))))
     rm(start_cols)
+  }
+
+  # estimate inverse probability weights, if relevant
+  if(ipw == TRUE){
+
+    # Within each DiD sample, estimate weights to balance provided covariates
+    ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
+    did_ids <- ES_data[, sort(unique(did_id))]
+
+    if(ipw_composition_change == FALSE){
+
+      ES_data[, pr_temp := as.numeric(NA)]
+
+      for(i in did_ids){
+
+        ipw_dt <- ES_make_ipw_dt(did_dt = copy(ES_data[did_id == i]),
+                                 unit_var = unit_var,
+                                 cal_time_var = cal_time_var,
+                                 discrete_covars = discrete_covars,
+                                 cont_covars = cont_covars,
+                                 ref_discrete_covars = ref_discrete_covars,
+                                 ref_cont_covars = ref_cont_covars,
+                                 omitted_event_time = omitted_event_time,
+                                 ipw_model = ipw_model,
+                                 reg_weights = reg_weights,
+                                 ipw_composition_change = ipw_composition_change
+        )
+        ipw_dt[, did_id := i]
+
+        ES_data <- merge(ES_data, ipw_dt, by = c(unit_var, cal_time_var, "did_id"), all.x = TRUE, sort = FALSE)
+        ES_data[is.na(pr_temp) & !is.na(pr), pr_temp := pr]
+        ES_data[, pr := NULL]
+        ipw_dt <- NULL
+        gc()
+      }
+
+      setnames(ES_data, "pr_temp", "pr")
+
+      if(ipw_data == TRUE){
+        ipw_dt <- ES_data[, list(get(unit_var), ref_onset_time, ref_event_time, catt_specific_sample, treated, pr)]
+        setnames(ipw_dt, "V1", unit_var)
+      }
+
+    }
   }
 
   # collect ATT estimates
@@ -1048,6 +1050,8 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                                  cal_time_var = cal_time_var,
                                  discrete_covars = discrete_covars,
                                  cont_covars = cont_covars,
+                                 ref_discrete_covars = ref_discrete_covars,
+                                 ref_cont_covars = ref_cont_covars,
                                  omitted_event_time = omitted_event_time,
                                  ipw_model = ipw_model,
                                  reg_weights = reg_weights,
