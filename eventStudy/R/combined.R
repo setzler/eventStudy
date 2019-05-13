@@ -7,7 +7,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL, add_unit_fes = FALSE,
                bootstrapES = FALSE, bootstrap_iters = 1,
                ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_data = FALSE, event_vs_noevent = FALSE,
-               ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0){
+               ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
+               calculate_collapse_estimates = FALSE, collapse_inputs = NULL){
 
   flog.info("Beginning ES.")
 
@@ -49,6 +50,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   assertIntegerish(bootstrap_iters,len=1,lower=1)
   assertFlag(ipw)
   assertFlag(ipw_composition_change)
+  assertFlag(calculate_collapse_estimates)
+  assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
 
   # check that anticipation choice and omitted_event_time choice don't conflict
   if(omitted_event_time + anticipation > -1){
@@ -129,7 +132,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   if(is.null(cluster_vars)){warning(sprintf("Supplied cluster_vars = NULL; given stacking in ES(), standard errors may be too small. Consider cluster_vars='%s' instead.", unit_var))}
 
   # warning if supplied num_cores exceeds detectCores() - 1
-  # not a perfect test (even as an upper bound) as results of detectCores() may be OS-dependent, do not respect cluster allocation limits, etc.
+  # not a perfect test (even as an upper bound) as results of detectCores() may be OS-dependent, may not respect cluster allocation limits, etc.
   # see help for detectCores() and mc.cores() for more information
   if(num_cores > (parallel::detectCores() - 1)){warning(sprintf("Supplied num_cores='%s'; this exceeds typical system limits and may cause issues.", num_cores))}
 
@@ -365,7 +368,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
-    ES_results_hetero = NULL
+    ES_results_hetero <- NULL
   }
   ES_results_homo <- ES_estimate_ATT(ES_data = ES_data,
                                      outcomevar=outcomevar,
@@ -537,6 +540,108 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   weighted_V2 <- NULL
   gc()
 
+  # Now we calculate the collapsed estimates
+
+  if(calculate_collapse_estimates == TRUE){
+
+    # Internall rename columns of collapse_input
+    setnames(collapse_inputs, c("name", "event_times"))
+
+    # Restrict attention to the coefficients supplied
+    dt <- figdata[ref_event_time %in% unique(na.omit(unlist(collapse_inputs[["event_times"]])))]
+
+    # Assign grouping
+    for(g in unique(na.omit(collapse_inputs[["name"]]))){
+      dt[ref_event_time %in% unique(na.omit(unlist(collapse_inputs[name == g][[2]]))), grouping := g]
+    }
+
+    subsets_for_avgs <- dt[rn %in% c("catt")]
+
+    subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(grouping)]
+    subsets_for_avgs[, rowid := seq_len(.N), by = list(grouping)]
+    subsets_for_avgs <- subsets_for_avgs[rowid == 1 | is.na(rowid)]
+
+    unweighted <- subsets_for_avgs[, list(grouping, unweighted_estimate)]
+    unweighted[, ref_onset_time := "Equally-Weighted + Collapsed"]
+    unweighted[, rn := "att"]
+    setnames(unweighted, c("unweighted_estimate"), c("estimate"))
+
+    dt <- rbindlist(list(dt, unweighted), use.names = TRUE, fill=TRUE)
+    dt[is.na(cluster_se), cluster_se := 0]
+
+    rm(subsets_for_avgs, unweighted)
+
+    templist = list()
+    i = 0
+    for(et in event_times){
+
+      i = i + 1
+
+      if(et < 0){
+        lookfor <- sprintf("cattlead%s$", abs(et))
+        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
+      } else{
+        lookfor <- sprintf("catt%s$", abs(et))
+        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+      }
+      coef_indices <- grep(lookfor, names(catt_coefs))
+      rm(lookfor)
+      temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
+      setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
+      rm(coef_indices)
+      temp[, estimate := NULL]
+      temp[, rn := gsub("lead", "-", rn)]
+      for (c in min_onset_time:max_onset_time) {
+        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
+        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
+      }
+      temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
+      temp[, rn := NULL]
+      temp[, ref_onset_time := as.character(ref_onset_time)]
+
+      # now merge in the weights
+      temp <- merge(temp, dt[rn == "catt"], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+      temp <- temp[, list(ref_onset_time, ref_event_time, coef_index)]
+      temp[, weight_V0 := 1 / .N]
+
+      for(g in unique(na.omit(collapse_inputs[["name"]]))){
+        temp[et %in% unique(na.omit(unlist(collapse_inputs[name == g][[2]]))), grouping := g]
+      }
+
+      templist[[i]] <- copy(temp)
+      rm(temp)
+      gc()
+
+    }
+
+    templist <- rbindlist(templist, use.names = TRUE)
+
+    # Now need to add the across-event-time weights
+    templist[, across_weight := (1 / uniqueN(ref_event_time)), by = list(grouping)]
+    templist[, full_weight := weight_V0 * across_weight]
+    templist[, equal_w_formula_entry := sprintf("(%s*x%s)", full_weight, coef_index)]
+    templist <- templist[!is.na(grouping)]
+
+    for(g in unique(na.omit(collapse_inputs[["name"]]))){
+
+      formula_input = paste0(templist[grouping == g]$equal_w_formula_entry, collapse = "+")
+
+      dt[rn == "att" & cluster_se == 0 & grouping == g & ref_onset_time == "Equally-Weighted + Collapsed",
+         cluster_se := delta_method(g = as.formula(paste("~", formula_input)),
+                                    mean = catt_coefs, cov = catt_vcov, ses = TRUE
+         )
+         ]
+
+      rm(formula_input)
+    }
+
+    rm(templist)
+
+    figdata <- rbindlist(list(figdata, dt[ref_onset_time == "Equally-Weighted + Collapsed"]), use.names = TRUE, fill = TRUE)
+    rm(dt)
+
+  }
+
   # start bootstrap run if relevant
   if(bootstrapES == TRUE){
 
@@ -556,7 +661,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                                  ipw = ipw, ipw_model = ipw_model, ipw_composition_change = ipw_composition_change, ipw_data = FALSE,
                                                  ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars,
                                                  ref_discrete_covar_event_time = ref_discrete_covar_event_time, ref_cont_covar_event_time = ref_cont_covar_event_time,
-                                                 event_vs_noevent = event_vs_noevent),
+                                                 event_vs_noevent = event_vs_noevent, calculate_collapse_estimates = calculate_collapse_estimates, collapse_inputs = collapse_inputs),
                               use.names = TRUE
                               )
 
@@ -809,11 +914,11 @@ delta_method <- function (g, mean, cov, ses = TRUE) {
     ## 3) take these elements and make Jacobian row-by-row
     as.numeric(attr(eval(deriv(form, syms)), "gradient"))
   }))
-  new.covar <- D_g %*% cov %*% t(D_g)
+  new_cov <- D_g %*% cov %*% t(D_g)
   if (ses == TRUE) {
-    result <- sqrt(diag(new.covar))
+    result <- sqrt(diag(new_cov))
   } else{
-    result <- new.covar
+    result <- new_cov
   }
 
   return(result)
@@ -860,7 +965,8 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                          residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
                          homogeneous_ATT = FALSE, reg_weights = NULL, add_unit_fes = FALSE,
                          ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_data = FALSE, event_vs_noevent = FALSE,
-                         ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0, iter){
+                         ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
+                         calculate_collapse_estimates = FALSE, collapse_inputs = NULL, iter){
 
 
   bs_long_data <- block_sample(long_data = copy(long_data), unit_var = unit_var, cal_time_var = cal_time_var)
@@ -902,6 +1008,9 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   assertFlag(add_unit_fes)
   assertFlag(ipw)
   assertFlag(ipw_composition_change)
+  assertFlag(calculate_collapse_estimates)
+  assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "integerish"))
+
 
   # check that anticipation choice and omitted_event_time choice don't conflict
   if(omitted_event_time + anticipation > -1){
