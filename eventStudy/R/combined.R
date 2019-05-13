@@ -51,8 +51,9 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   assertFlag(ipw)
   assertFlag(ipw_composition_change)
   assertFlag(calculate_collapse_estimates)
-  assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
-
+  if(calculate_collapse_estimates == TRUE){
+    assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
+  }
   # check that anticipation choice and omitted_event_time choice don't conflict
   if(omitted_event_time + anticipation > -1){
     stop(sprintf("omitted_event_time='%s' and anticipation='%s' implies overlap of pre-treatment and anticipation periods. Let me suggest omitted_event_time<='%s'",
