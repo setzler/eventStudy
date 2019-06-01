@@ -693,6 +693,9 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     }
   }
 
+  # add overall unique units count
+  figdata[, total_unique_units := unique_units]
+
   # start bootstrap run if relevant
   if(bootstrapES == TRUE){
 
