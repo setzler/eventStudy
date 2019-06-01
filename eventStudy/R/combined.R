@@ -105,16 +105,21 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
   assertIntegerish(ref_cont_covar_event_time,len=1)
 
-  # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var)
-  design_vars <- c(cal_time_var, onset_time_var)
+  # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var or unit_var)
+  if(add_unit_fes == TRUE){
+    design_vars <- c(cal_time_var, unit_var)
+  } else{
+    design_vars <- c(cal_time_var, onset_time_var)
+  }
+
   if(testCharacter(discrete_covars)){
     for(vv in discrete_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, cal_time_var, onset_time_var))}
+      if(vv %in% design_vars){stop(sprintf("Variable discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
     }
   }
   if(testCharacter(cont_covars)){
     for(vv in cont_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, cal_time_var, onset_time_var))}
+      if(vv %in% design_vars){stop(sprintf("Variable cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
     }
   }
 
@@ -151,6 +156,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
 
   # edit long_data in line with supplied never_treat_action option
+  # NOTE: this will alter supplied long_data
   if(never_treat_action == 'exclude'){
     never_treat_val = NA
     long_data <- long_data[!is.na(get(onset_time_var))]
@@ -164,6 +170,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
 
   # fill with zeros
+  # NOTE: this will alter supplied long_data
   if(fill_zeros){
     flog.info("Filling in zeros.")
     long_data <- ES_expand_to_balance(long_data = long_data,
@@ -178,7 +185,14 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     stop(sprintf("Variable onset_time_var='%s' has no treated groups with observations at pre-treatment event time %s.",onset_time_var, omitted_event_time))
   }
 
+  # remove any cases with reg_weights == 0, -Inf, Inf, or NA (if relevant)
+  # NOTE: this will alter supplied long_data
+  if(!(is.null(reg_weights))){
+    long_data <- long_data[(!is.na(get(reg_weights))) & (!is.infinite(get(reg_weights))) & (get(reg_weights) != 0)]
+  }
+
   # linearize pre-trends; never-treated will be treated as a single cohort
+  # NOTE: this will alter supplied long_data
   if(linearize_pretrends){
     flog.info("Linearizing pre-trends.")
     long_data <- ES_parallelize_trends(long_data = long_data, outcomevar = outcomevar,
@@ -186,6 +200,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                        anticipation = anticipation, reg_weights = reg_weights)
   }
 
+  # extrapolate contribution of covariates using pre-treated period
+  # NOTE: this will alter supplied long_data
   if(residualize_covariates){
     flog.info("Residualizing on covariates.")
     long_data <- ES_residualize_covariates(long_data = long_data, outcomevar = outcomevar,
@@ -335,11 +351,18 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
       setnames(ES_data, "pr_temp", "pr")
 
+      # This would be the place to add additional assumptions
+      # E.g., restrict to propensity scores strictly in [a,b], a>0 and b<1
+      ES_data <- ES_data[!is.na(pr) & !is.infinite(pr) & (between(pr, 0, 1, incbounds = FALSE))]
+      gc()
+
+      ES_data[treated == 1, pw := 1]
+      ES_data[treated == 0, pw := (pr / (1 - pr))]
+
       if(ipw_data == TRUE){
         ipw_dt <- ES_data[, list(get(unit_var), ref_onset_time, ref_event_time, catt_specific_sample, treated, pr)]
         setnames(ipw_dt, "V1", unit_var)
       }
-
     }
   }
 
@@ -391,52 +414,87 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
   # collect levels by treatment/control
   if(!(is.null(reg_weights))){
-    # STILL NEED TO FIX THE SEs to be WEIGHTEDs; for now use unweighted
+    # STILL NEED TO FIX THE SEs to be WEIGHTED; for now use unweighted
     ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = weighted.mean(get(outcomevar), get(reg_weights)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
   } else{
     ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = mean(get(outcomevar)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
   }
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
+  # as we won't have an estimate for the omitted_event_time, exclude it below
   if(!(is.null(reg_weights))){
-    # to revisit
-    ES_treat_count_V1 <- ES_data[treated == 1,list(treat_count_V1 = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   } else{
-    ES_treat_count_V1 <- ES_data[treated == 1,list(treat_count_V1 = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   }
-  # omitted_event_time is excluded, so let's ensure it is excluded from the above as well
-  ES_treat_count_V1 <- ES_treat_count_V1[ref_event_time != omitted_event_time]
 
   # collect count of treated+control units by each (ref_onset_time, ref_event_time) for V2 of population-weighted ATTs
+  # as we won't have an estimate for the omitted_event_time, exclude it below
   if(!(is.null(reg_weights))){
-    # to revisit
-    ES_treat_count_V2 <- ES_data[,list(treat_count_V2 = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   } else{
-    ES_treat_count_V2 <- ES_data[,list(treat_count_V2 = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   }
-  # omitted_event_time is excluded, so let's ensure it is excluded from the above as well
-  ES_treat_count_V2 <- ES_treat_count_V2[ref_event_time != omitted_event_time]
+
+  # collect count of unique units that will be (implicitly) used to estimate cohort- and equally-weighted avgs for each event time
+  # as we won't have an estimate for the omitted_event_time, exclude it below
+  # will merge these onto figdata at the very end
+  event_time_total_unique_units <- ES_data[ref_event_time != omitted_event_time, list(event_time_total_unique_units = uniqueN(get(unit_var), na.rm = TRUE)), by = list(ref_event_time)][order(ref_event_time)]
+
+  # collect count of unique units that will be (implicitly) used to estimate collapsed estimates
+  # will merge these onto figdata at the very end (if relevant)
+  if(calculate_collapse_estimates == TRUE){
+
+    # quick copy to prevent from editing the supplied collapse_inputs directly
+    collapse_input_dt <- copy(collapse_inputs)
+
+    # internal rename columns of collapse_input_dt
+    setnames(collapse_input_dt, c("name", "event_times"))
+
+    # for each grouping, get a unique count separately, and then just make a small table
+    # as we won't have an estimate for the omitted_event_time, exclude it
+    collapsed_estimate_total_unique_units <- list()
+    i <- 0
+    for(g in unique(na.omit(collapse_input_dt[["name"]]))){
+      i <- i + 1
+      count <- ES_data[(ref_event_time != omitted_event_time) & (ref_event_time %in% unique(na.omit(unlist(collapse_input_dt[name == g][[2]])))),
+                       uniqueN(get(unit_var), na.rm = TRUE)
+                       ]
+      collapsed_estimate_total_unique_units[[i]] <- data.table(grouping = g, collapsed_estimate_total_unique_units = count)
+    }
+    rm(i)
+
+    collapsed_estimate_total_unique_units <- rbindlist(collapsed_estimate_total_unique_units, use.names = TRUE)
+
+  }
+
+  # finally, outermost count of unique units in full ES_data
+  unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
+  gc()
 
   ES_data <- NULL
   gc()
 
   figdata <- rbindlist(list(ES_results_hetero, ES_results_homo, ES_treatcontrol_means), use.names = TRUE, fill=TRUE)
 
+  # merge various *_unique_units into figdata
+  # exclude catt_treated_unique_units/catt_total_unique_units as these will be added as part of (un)weighted means below
+
   # calculate unweighted and V1/V2 weighted means
-  ES_treat_count_V1[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
-  ES_treat_count_V2[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
-  figdata <- merge(figdata, ES_treat_count_V1, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
-  figdata <- merge(figdata, ES_treat_count_V2, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+  catt_treated_unique_units[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
+  catt_total_unique_units[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
+  figdata <- merge(figdata, catt_treated_unique_units, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+  figdata <- merge(figdata, catt_total_unique_units, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
 
   subsets_for_avgs <- figdata[rn %in% c("catt")]
   subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weight_V1 := treat_count_V1 / sum(treat_count_V1, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weight_V2 := treat_count_V2 / sum(treat_count_V2, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = weight_V1, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = weight_V2, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, cohort_weight_V1 := catt_treated_unique_units / sum(catt_treated_unique_units, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, cohort_weight_V2 := catt_total_unique_units / sum(catt_total_unique_units, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time)]
 
   # merge weights into figdata
-  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, weight_V1, weight_V2)]
+  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, cohort_weight_V1, cohort_weight_V2)]
   figdata <- merge(figdata, weights, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
 
   # rbind the (un)weighted avg estimates to figdata much like the "Pooled" data
@@ -501,12 +559,12 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
     # now merge in the weights
     temp <- merge(temp, figdata[rn == "catt"], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
-    temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, weight_V1, weight_V2)]
-    temp[, weight_V0 := 1 / .N]
+    temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, cohort_weight_V1, cohort_weight_V2)]
+    temp[, equal_weight := 1 / .N]
 
-    temp[, equal_w_formula_entry := sprintf("(%s*x%s)", weight_V0, coef_index)]
-    temp[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", weight_V1, coef_index)]
-    temp[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", weight_V2, coef_index)]
+    temp[, equal_w_formula_entry := sprintf("(%s*x%s)", equal_weight, coef_index)]
+    temp[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", cohort_weight_V1, coef_index)]
+    temp[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", cohort_weight_V2, coef_index)]
 
     equal_w_g_formula_input = paste0(temp$equal_w_formula_entry, collapse = "+")
     cohort_w_v1_g_formula_input = paste0(temp$cohort_w_v1_formula_entry, collapse = "+")
@@ -541,106 +599,98 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   weighted_V2 <- NULL
   gc()
 
-  # Now we calculate the collapsed estimates
+  # merge in the sample sizes
+  figdata <- merge(figdata, event_time_total_unique_units, by = "ref_event_time", all.x = TRUE, sort = FALSE)
+
+  # Now we calculate the collapsed estimates, if relevant
 
   if(calculate_collapse_estimates == TRUE){
 
-    # Internall rename columns of collapse_input
-    setnames(collapse_inputs, c("name", "event_times"))
+    # recall, ran 'collapse_input_dt <- copy(collapse_inputs)' earlier
+    # and 'setnames(collapse_input_dt, c("name", "event_times"))
 
-    # Restrict attention to the coefficients supplied
-    dt <- figdata[ref_event_time %in% unique(na.omit(unlist(collapse_inputs[["event_times"]])))]
+    for(g in unique(na.omit(collapse_input_dt[["name"]]))){
 
-    # Assign grouping
-    for(g in unique(na.omit(collapse_inputs[["name"]]))){
-      dt[ref_event_time %in% unique(na.omit(unlist(collapse_inputs[name == g][[2]]))), grouping := g]
-    }
+      # extract event_times and results corresponding to grouping
+      # as we won't have an estimate for the omitted_event_time, exclude it below
+      group_event_times <- setdiff(unique(na.omit(unlist(collapse_input_dt[name == g][[2]]))), omitted_event_time)
+      dt <- figdata[(ref_event_time %in% group_event_times) & (rn == "catt")]
+      dt[, grouping := g]
+      dt[, unweighted_estimate := mean(estimate, na.rm = TRUE)]
+      dt[, rowid := seq_len(.N)]
+      result <- dt[rowid == 1 | is.na(rowid)]
+      dt[, rowid := NULL]
 
-    subsets_for_avgs <- dt[rn %in% c("catt")]
+      result <- result[, list(grouping, unweighted_estimate)]
+      result[, ref_onset_time := "Equally-Weighted + Collapsed"]
+      result[, rn := "att"]
+      setnames(result, c("unweighted_estimate"), c("estimate"))
+      result[, cluster_se := 0]
 
-    subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(grouping)]
-    subsets_for_avgs[, rowid := seq_len(.N), by = list(grouping)]
-    subsets_for_avgs <- subsets_for_avgs[rowid == 1 | is.na(rowid)]
+      templist = list()
+      i = 0
+      for(et in group_event_times){
 
-    unweighted <- subsets_for_avgs[, list(grouping, unweighted_estimate)]
-    unweighted[, ref_onset_time := "Equally-Weighted + Collapsed"]
-    unweighted[, rn := "att"]
-    setnames(unweighted, c("unweighted_estimate"), c("estimate"))
+        i = i + 1
 
-    dt <- rbindlist(list(dt, unweighted), use.names = TRUE, fill=TRUE)
-    dt[is.na(cluster_se), cluster_se := 0]
+        if(et < 0){
+          lookfor <- sprintf("cattlead%s$", abs(et))
+          # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
+        } else{
+          lookfor <- sprintf("catt%s$", abs(et))
+          # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+        }
+        coef_indices <- grep(lookfor, names(catt_coefs))
+        rm(lookfor)
+        temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
+        setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
+        rm(coef_indices)
+        temp[, estimate := NULL]
+        temp[, rn := gsub("lead", "-", rn)]
+        for (c in min_onset_time:max_onset_time) {
+          temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
+          temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
+        }
+        temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
+        temp[, rn := NULL]
+        temp[, ref_onset_time := as.character(ref_onset_time)]
 
-    rm(subsets_for_avgs, unweighted)
+        # now merge in the within-event-time weights
+        temp <- merge(temp, dt, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+        temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, grouping)]
+        temp[, equal_weight := 1 / .N]
 
-    templist = list()
-    i = 0
-    for(et in event_times){
+        templist[[i]] <- copy(temp)
+        rm(temp)
+        gc()
 
-      i = i + 1
-
-      if(et < 0){
-        lookfor <- sprintf("cattlead%s$", abs(et))
-        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
-      } else{
-        lookfor <- sprintf("catt%s$", abs(et))
-        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
       }
-      coef_indices <- grep(lookfor, names(catt_coefs))
-      rm(lookfor)
-      temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
-      setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
-      rm(coef_indices)
-      temp[, estimate := NULL]
-      temp[, rn := gsub("lead", "-", rn)]
-      for (c in min_onset_time:max_onset_time) {
-        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
-        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
-      }
-      temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
-      temp[, rn := NULL]
-      temp[, ref_onset_time := as.character(ref_onset_time)]
+      rm(i, dt)
 
-      # now merge in the weights
-      temp <- merge(temp, dt[rn == "catt"], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
-      temp <- temp[, list(ref_onset_time, ref_event_time, coef_index)]
-      temp[, weight_V0 := 1 / .N]
+      templist <- rbindlist(templist, use.names = TRUE)
 
-      for(g in unique(na.omit(collapse_inputs[["name"]]))){
-        temp[et %in% unique(na.omit(unlist(collapse_inputs[name == g][[2]]))), grouping := g]
-      }
+      # Now add the across-event-time weights and calculate full (multiplicative) weights
+      templist[, across_weight := (1 / uniqueN(ref_event_time))]
+      templist[, full_weight := equal_weight * across_weight]
+      templist[, equal_w_formula_entry := sprintf("(%s*x%s)", full_weight, coef_index)]
 
-      templist[[i]] <- copy(temp)
-      rm(temp)
-      gc()
+      formula_input = paste0(templist$equal_w_formula_entry, collapse = "+")
 
+      result[, cluster_se := delta_method(g = as.formula(paste("~", formula_input)),
+                                          mean = catt_coefs,
+                                          cov = catt_vcov,
+                                          ses = TRUE
+                                          )
+             ]
+
+      rm(formula_input, templist)
+
+      # merge in sample size
+      result <- merge(result, collapsed_estimate_total_unique_units, by = "grouping", all.x = TRUE, sort = FALSE)
+
+      figdata <- rbindlist(list(figdata, result), use.names = TRUE, fill = TRUE)
+      rm(result)
     }
-
-    templist <- rbindlist(templist, use.names = TRUE)
-
-    # Now need to add the across-event-time weights
-    templist[, across_weight := (1 / uniqueN(ref_event_time)), by = list(grouping)]
-    templist[, full_weight := weight_V0 * across_weight]
-    templist[, equal_w_formula_entry := sprintf("(%s*x%s)", full_weight, coef_index)]
-    templist <- templist[!is.na(grouping)]
-
-    for(g in unique(na.omit(collapse_inputs[["name"]]))){
-
-      formula_input = paste0(templist[grouping == g]$equal_w_formula_entry, collapse = "+")
-
-      dt[rn == "att" & cluster_se == 0 & grouping == g & ref_onset_time == "Equally-Weighted + Collapsed",
-         cluster_se := delta_method(g = as.formula(paste("~", formula_input)),
-                                    mean = catt_coefs, cov = catt_vcov, ses = TRUE
-         )
-         ]
-
-      rm(formula_input)
-    }
-
-    rm(templist)
-
-    figdata <- rbindlist(list(figdata, dt[ref_onset_time == "Equally-Weighted + Collapsed"]), use.names = TRUE, fill = TRUE)
-    rm(dt)
-
   }
 
   # start bootstrap run if relevant
@@ -768,15 +818,7 @@ ES_plot_ipw <- function(figdata,
                         align = "vertical",
                         omitted_event_time = -2){
 
-  # figdata <- copy(res1a)
-  # type <- 'density'
-  # cohort_subset = 2001
-  # binwidth = 0.01
-
-  # As this function changes the underlying results data and figdata tends to be a small file, make a copy now
-  figdata_temp <- copy(figdata)
-
-  figdata_temp <- figdata_temp[!is.na(pr) & ref_event_time != omitted_event_time, list(ref_onset_time, ref_event_time, catt_specific_sample, treated, pr)]
+  figdata_temp <- figdata[!is.na(pr) & ref_event_time != omitted_event_time, list(ref_onset_time, ref_event_time, catt_specific_sample, treated, pr)]
   figdata_temp[, ref_onset_time :=  as.integer(as.character(ref_onset_time))]
   figdata_temp[, ref_event_time := as.integer(as.character(ref_event_time))]
   figdata_temp[treated==1, treatment := "Treatment"]
@@ -1232,22 +1274,22 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
   if(!(is.null(reg_weights))){
     # to revisit
-    ES_treat_count_V1 <- ES_data[treated == 1,list(treat_count_V1 = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    catt_treated_unique_units <- ES_data[treated == 1,list(catt_treated_unique_units = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   } else{
-    ES_treat_count_V1 <- ES_data[treated == 1,list(treat_count_V1 = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    catt_treated_unique_units <- ES_data[treated == 1,list(catt_treated_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   }
   # omitted_event_time is excluded, so let's ensure it is excluded from the above as well
-  ES_treat_count_V1 <- ES_treat_count_V1[ref_event_time != omitted_event_time]
+  catt_treated_unique_units <- catt_treated_unique_units[ref_event_time != omitted_event_time]
 
   # collect count of treated+control units by each (ref_onset_time, ref_event_time) for V2 of population-weighted ATTs
   if(!(is.null(reg_weights))){
     # to revisit
-    ES_treat_count_V2 <- ES_data[,list(treat_count_V2 = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    catt_total_unique_units <- ES_data[,list(catt_total_unique_units = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   } else{
-    ES_treat_count_V2 <- ES_data[,list(treat_count_V2 = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    catt_total_unique_units <- ES_data[,list(catt_total_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   }
   # omitted_event_time is excluded, so let's ensure it is excluded from the above as well
-  ES_treat_count_V2 <- ES_treat_count_V2[ref_event_time != omitted_event_time]
+  catt_total_unique_units <- catt_total_unique_units[ref_event_time != omitted_event_time]
 
   ES_data <- NULL
   gc()
@@ -1255,20 +1297,20 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   figdata <- rbindlist(list(ES_results_hetero, ES_results_homo), use.names = TRUE, fill=TRUE)
 
   # calculate unweighted and V1/V2 weighted means
-  ES_treat_count_V1[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
-  ES_treat_count_V2[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
-  figdata <- merge(figdata, ES_treat_count_V1, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
-  figdata <- merge(figdata, ES_treat_count_V2, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+  catt_treated_unique_units[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
+  catt_total_unique_units[, ref_onset_time := as.character(ref_onset_time)] # to match figdata
+  figdata <- merge(figdata, catt_treated_unique_units, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+  figdata <- merge(figdata, catt_total_unique_units, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
 
   subsets_for_avgs <- figdata[rn %in% c("catt")]
   subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weight_V1 := treat_count_V1 / sum(treat_count_V1, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weight_V2 := treat_count_V2 / sum(treat_count_V2, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = weight_V1, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = weight_V2, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, cohort_weight_V1 := catt_treated_unique_units / sum(catt_treated_unique_units, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, cohort_weight_V2 := catt_total_unique_units / sum(catt_total_unique_units, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time)]
 
   # merge weights into figdata
-  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, weight_V1, weight_V2)]
+  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, cohort_weight_V1, cohort_weight_V2)]
   figdata <- merge(figdata, weights, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
 
   # rbind the (un)weighted avg estimates to figdata much like the "Pooled" data

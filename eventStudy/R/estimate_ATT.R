@@ -27,12 +27,22 @@ ES_estimate_ATT <- function(ES_data,
   ES_data[, ref_onset_ref_event_time := .GRP, by = list(ref_onset_time, ref_event_time)]
 
   if(add_unit_fes == TRUE){
-    # balance the sample in the unit_var dimension
     ES_data[, unit_sample := .GRP, by = list(get(unit_var), catt_specific_sample, ref_onset_time)]
   } else{
-    # sample already balanced
     ES_data[, unit_sample := .GRP, by = list(get(onset_time_var), catt_specific_sample, ref_onset_time)]
   }
+
+  # felm() will necessarily drop singletons on unit_sample, so we just exclude those now
+  # in practice, this step should only have bite if add_unit_fes == TRUE
+  ES_data[, unit_var_block_count := .N, by = list(unit_sample)]
+  count_dropcases <- dim(ES_data[unit_var_block_count <= 1])[1]
+  if(count_dropcases > 0){
+    ES_data <- ES_data[unit_var_block_count > 1]
+    rm(count_dropcases)
+  }
+  ES_data[, unit_var_block_count := NULL]
+  gc()
+
   if(!(is.null(cluster_vars))){
     ES_data[, cluster_on_this := .GRP, by = cluster_vars]
     cluster_on_this <- "cluster_on_this"
@@ -77,30 +87,6 @@ ES_estimate_ATT <- function(ES_data,
 
   }
 
-  if(ipw == TRUE){
-
-    if(ipw_composition_change == FALSE){
-
-      # Construct ATT weights
-      # For ipw_composition_change == TRUE case, will make them as part of ES_make_ipw_dt
-
-      ES_data[treated == 1, pw := 1]
-      ES_data[treated == 0, pw := (pr / (1 - pr))]
-
-      # Pre-processing some issues of numerical precision
-      ES_data[pw < 0, pw := 0]
-
-      # This would be the place to add additional assumptions
-      # E.g., restrict to propensity scores strictly between 0 and 1
-
-      ES_data[, pr_subset := as.integer(between(pr, 0, 1, incbounds = FALSE))]
-      gc()
-    } else{
-      ES_data[, pr_subset := 1L]
-    }
-
-  }
-
   start_cols <- copy(colnames(ES_data))
 
   if (homogeneous_ATT == FALSE) {
@@ -122,16 +108,13 @@ ES_estimate_ATT <- function(ES_data,
     if(ipw == TRUE){
 
       if(!(is.null(reg_weights))){
-        ES_data[pr_subset == 1, pw := pw * get(reg_weights)]
+        ES_data[, pw := pw * get(reg_weights)]
       }
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                  data = ES_data[pr_subset == 1], weights = ES_data[pr_subset == 1]$pw,
+                  data = ES_data, weights = ES_data$pw,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
-
-      unique_units <- ES_data[pr_subset == 1 & !is.na(pw), uniqueN(get(unit_var), na.rm = TRUE)]
-      gc()
 
     } else if(residualize_covariates == TRUE){
 
@@ -140,18 +123,11 @@ ES_estimate_ATT <- function(ES_data,
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
-
-        unique_units <- ES_data[!is.na(reg_weights), uniqueN(get(unit_var), na.rm = TRUE)]
-        gc()
-
       } else{
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
-
-        unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
-        gc()
       }
 
     } else{
@@ -164,25 +140,18 @@ ES_estimate_ATT <- function(ES_data,
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
-
-        unique_units <- ES_data[!is.na(reg_weights), uniqueN(get(unit_var), na.rm = TRUE)]
-        gc()
-
       } else{
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
-
-        unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
-        gc()
-
       }
     }
 
     # Grabbing the estimates and vcov to produce weighted avg SEs
     # Note: vcov already reflects weights used in estimation
     catt_coefs <- coef(est)
+
     if(!(is.null(cluster_vars))){
       catt_vcov <- est$clustervcv
     } else{
@@ -190,15 +159,23 @@ ES_estimate_ATT <- function(ES_data,
     }
 
     if(!(is.null(cluster_vars))){
-      results <- data.table(rn = rownames(est$beta), estimate = as.vector(est$beta), cluster_se = est$cse, t = est$ctval, pval = est$cpval)
+      results <- data.table(rn = rownames(est$beta),
+                            estimate = as.vector(est$beta),
+                            cluster_se = est$cse,
+                            t = est$ctval,
+                            pval = est$cpval,
+                            reg_sample_size = est$N)
     } else{
-      results <- data.table(rn = rownames(est$beta), estimate = as.vector(est$beta), cluster_se = est$rse, t = est$rtval, pval = est$rpval)
+      results <- data.table(rn = rownames(est$beta),
+                            estimate = as.vector(est$beta),
+                            cluster_se = est$rse,
+                            t = est$rtval,
+                            pval = est$rpval,
+                            reg_sample_size = est$N)
     }
-
-    results[, reg_sample_size := est$N]
-    results[, reg_unique_units := unique_units]
     est <- NULL
     gc()
+
     results[!grepl("ref\\_onset\\_time", rn), e := min_onset_time]
     results[, rn := gsub("lead", "-", rn)]
     for (c in min_onset_time:max_onset_time) {
@@ -228,16 +205,13 @@ ES_estimate_ATT <- function(ES_data,
     if(ipw == TRUE){
 
       if(!(is.null(reg_weights))){
-        ES_data[pr_subset == 1, pw := pw * get(reg_weights)]
+        ES_data[, pw := pw * get(reg_weights)]
       }
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                  data = ES_data[pr_subset == 1], weights = ES_data[pr_subset == 1]$pw,
+                  data = ES_data, weights = ES_data$pw,
                   nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
       )
-
-      unique_units <- ES_data[pr_subset == 1 & !is.na(pw), uniqueN(get(unit_var), na.rm = TRUE)]
-      gc()
 
     } else if(residualize_covariates == TRUE){
 
@@ -246,20 +220,11 @@ ES_estimate_ATT <- function(ES_data,
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
-
-        unique_units <- ES_data[!is.na(reg_weights), uniqueN(get(unit_var), na.rm = TRUE)]
-        gc()
-
-
       } else{
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
-
-        unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
-        gc()
-
       }
 
     } else{
@@ -272,19 +237,11 @@ ES_estimate_ATT <- function(ES_data,
                     data = ES_data, weights = ES_data[[reg_weights]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
-
-        unique_units <- ES_data[!is.na(reg_weights), uniqueN(get(unit_var), na.rm = TRUE)]
-        gc()
-
       } else{
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
                     data = ES_data,
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
-
-        unique_units <- ES_data[, uniqueN(get(unit_var), na.rm = TRUE)]
-        gc()
-
       }
 
     }
@@ -294,15 +251,23 @@ ES_estimate_ATT <- function(ES_data,
     catt_vcov <- NA
 
     if(!(is.null(cluster_vars))){
-      results <- data.table(rn = rownames(est$beta), estimate = as.vector(est$beta), cluster_se = est$cse, t = est$ctval, pval = est$cpval)
+      results <- data.table(rn = rownames(est$beta),
+                            estimate = as.vector(est$beta),
+                            cluster_se = est$cse,
+                            t = est$ctval,
+                            pval = est$cpval,
+                            reg_sample_size = est$N)
     } else{
-      results <- data.table(rn = rownames(est$beta), estimate = as.vector(est$beta), cluster_se = est$rse, t = est$rtval, pval = est$rpval)
+      results <- data.table(rn = rownames(est$beta),
+                            estimate = as.vector(est$beta),
+                            cluster_se = est$rse,
+                            t = est$rtval,
+                            pval = est$rpval,
+                            reg_sample_size = est$N)
     }
-
-    results[, reg_sample_size := est$N]
-    results[, reg_unique_units := unique_units]
     est <- NULL
     gc()
+
     results <- results[grep("att", rn)]
     results[grep("lead", rn), rn := gsub("lead", "-", rn)]
     results[, e := "Pooled"]
@@ -431,61 +396,6 @@ ES_make_ipw_dt <- function(did_dt,
         did_dt[, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input)),family = quasibinomial(link = ipw_model), data = did_dt), type = "response")]
       }
     }
-
-    # # TO DELETE - TEST
-    #
-    # did_dt[treated == 1, pw := 1]
-    # did_dt[treated == 0, pw := (pr / (1-pr))]
-    #
-    # if(!(is.null(reg_weights))){
-    #   did_dt[, pw := pw * get(reg_weights)]
-    # }
-    #
-    # if(is.na(pre_discrete_covar_formula_input)){
-    #   for(c in cont_covars){
-    #     c_name <- sprintf("%s_pre", c)
-    #     balance <- did_dt[, list(weighted_mean = weighted.mean(get(c_name), pw)),
-    #                       by = list(ref_onset_time, catt_specific_sample, treated)
-    #                       ]
-    #     balance_wide <- dcast(balance, ref_onset_time + catt_specific_sample ~ treated, value.var = "weighted_mean")
-    #     setnames(balance_wide, c("0", "1"), c("control", "treat"))
-    #     print(balance)
-    #     print(sprintf("For ref_onset_time='%s' & catt_specific_sample='%s', are T/C balanced on %s? %s",
-    #                   balance_wide$ref_onset_time[1], balance_wide$catt_specific_sample[1], c, all.equal(balance_wide$control[1], balance_wide$treat[1], tol = 10^-13))
-    #     )
-    #     rm(balance, balance_wide, c_name)
-    #   }
-    # } else if(is.na(pre_cont_covar_formula_input)){
-    #   for(d in discrete_covars){
-    #     d_name <- sprintf("%s_pre", d)
-    #     balance <- did_dt[, list(weighted_mean = weighted.mean(get(d_name), pw)),
-    #                       by = list(ref_onset_time, catt_specific_sample, treated)
-    #                       ]
-    #     balance_wide <- dcast(balance, ref_onset_time + catt_specific_sample ~ treated, value.var = "weighted_mean")
-    #     setnames(balance_wide, c("0", "1"), c("control", "treat"))
-    #     print(balance)
-    #     print(sprintf("For ref_onset_time='%s' & catt_specific_sample='%s', are T/C balanced on %s? %s",
-    #                   balance_wide$ref_onset_time[1], balance_wide$catt_specific_sample[1], d, all.equal(balance_wide$control[1], balance_wide$treat[1], tol = 10^-13))
-    #     )
-    #     rm(balance, balance_wide, d_name)
-    #   }
-    # } else{
-    #   for(v in c(discrete_covars, cont_covars)){
-    #     v_name <- sprintf("%s_pre", v)
-    #     balance <- did_dt[, list(weighted_mean = weighted.mean(get(v_name), pw)),
-    #                       by = list(ref_onset_time, catt_specific_sample, treated)
-    #                       ]
-    #     balance_wide <- dcast(balance, ref_onset_time + catt_specific_sample ~ treated, value.var = "weighted_mean")
-    #     setnames(balance_wide, c("0", "1"), c("control", "treat"))
-    #     print(balance)
-    #     print(sprintf("For ref_onset_time='%s' & catt_specific_sample='%s', are T/C balanced on %s? %s",
-    #                   balance_wide$ref_onset_time[1], balance_wide$catt_specific_sample[1], v, all.equal(balance_wide$control[1], balance_wide$treat[1], tol = 10^-13))
-    #     )
-    #     rm(balance, balance_wide, v_name)
-    #   }
-    # }
-    #
-    # # END TO DELETE
 
     rm(pre_discrete_covar_formula_input, pre_cont_covar_formula_input, formula_input)
     new_cols <- setdiff(colnames(did_dt), c(unit_var, cal_time_var, "pr"))
