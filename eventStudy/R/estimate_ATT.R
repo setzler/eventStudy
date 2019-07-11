@@ -20,7 +20,6 @@ ES_estimate_ATT <- function(ES_data,
                             ) {
 
   onset_times <- sort(unique(ES_data[, .N, by = eval(onset_time_var)][[onset_time_var]]))
-  ref_onset_times <- sort(unique(ES_data[, .N, by = list(ref_onset_time)][["ref_onset_time"]]))
   min_onset_time <- min(onset_times)
   max_onset_time <- max(onset_times)
 
@@ -42,6 +41,9 @@ ES_estimate_ATT <- function(ES_data,
   }
   ES_data[, unit_var_block_count := NULL]
   gc()
+
+  # define the unique reference onset times now, after all known pre-drops of observations have been done
+  ref_onset_times <- sort(unique(ES_data[, .N, by = list(ref_onset_time)][["ref_onset_time"]]))
 
   if(!(is.null(cluster_vars))){
     ES_data[, cluster_on_this := .GRP, by = cluster_vars]

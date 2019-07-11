@@ -6,7 +6,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                fill_zeros=FALSE, residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
                homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL, add_unit_fes = FALSE,
                bootstrapES = FALSE, bootstrap_iters = 1,
-               ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_data = FALSE, event_vs_noevent = FALSE,
+               ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_data = FALSE, ipw_ps_lower_bound = 0, ipw_ps_upper_bound = 1,
+               event_vs_noevent = FALSE,
                ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
                calculate_collapse_estimates = FALSE, collapse_inputs = NULL){
 
@@ -50,10 +51,13 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   assertIntegerish(bootstrap_iters,len=1,lower=1)
   assertFlag(ipw)
   assertFlag(ipw_composition_change)
+  assertNumber(ipw_ps_lower_bound,lower=0,upper=1)
+  assertNumber(ipw_ps_upper_bound,lower=0,upper=1)
   assertFlag(calculate_collapse_estimates)
   if(calculate_collapse_estimates == TRUE){
     assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
   }
+
   # check that anticipation choice and omitted_event_time choice don't conflict
   if(omitted_event_time + anticipation > -1){
     stop(sprintf("omitted_event_time='%s' and anticipation='%s' implies overlap of pre-treatment and anticipation periods. Let me suggest omitted_event_time<='%s'",
@@ -142,11 +146,15 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   # see help for detectCores() and mc.cores() for more information
   if(num_cores > (parallel::detectCores() - 1)){warning(sprintf("Supplied num_cores='%s'; this exceeds typical system limits and may cause issues.", num_cores))}
 
-  # check that ipw model conforms to available options
+  # check that ipw model conforms to available options, and that propensity score cutoffs are sensible
   if(ipw == TRUE){
     if(!(ipw_model %in% c('linear', 'logit', 'probit'))){
       stop(sprintf("ipw_model='%s' is not among allowed values (c('linear', 'logit', 'probit')).", ipw_model))
     }
+  }
+
+  if(ipw_ps_lower_bound > ipw_ps_upper_bound){
+    stop(sprintf("ipw_ps_lower_bound='%s' & ipw_ps_upper_bound='%s', which means ipw_ps_lower_bound > ipw_ps_upper_bound. Consider revising these cutoffs.", ipw_ps_lower_bound, ipw_ps_upper_bound))
   }
 
   # if user will be producing bootstrap SEs, want to preserve a copy of the data as it is now;
@@ -189,6 +197,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   # NOTE: this will alter supplied long_data
   if(!(is.null(reg_weights))){
     long_data <- long_data[(!is.na(get(reg_weights))) & (!is.infinite(get(reg_weights))) & (get(reg_weights) != 0)]
+    gc()
   }
 
   # linearize pre-trends; never-treated will be treated as a single cohort
@@ -351,10 +360,33 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
       setnames(ES_data, "pr_temp", "pr")
 
-      # This would be the place to add additional assumptions
-      # E.g., restrict to propensity scores strictly in [a,b], a>0 and b<1
-      ES_data <- ES_data[!is.na(pr) & !is.infinite(pr) & (between(pr, 0, 1, incbounds = FALSE))]
+      # Restrict to propensity scores strictly in [a,b], a>0 and b<1 (default: a=0, b=1)
+      # Also grab the total count, share NA pr, share infinite pr, share pr < a, and share pr > b
+      count_ES_initial <- dim(ES_data)[1]
+      count_pr_isna <- dim(ES_data[is.na(pr)])[1]
+      count_pr_isinf <- dim(ES_data[is.infinite(pr)])[1]
+      count_pr_extremelow <- dim(ES_data[pr <= ipw_ps_lower_bound])[1]
+      count_pr_extremehigh <- dim(ES_data[pr >= ipw_ps_upper_bound])[1]
+
+      ES_data <- ES_data[!is.na(pr) & !is.infinite(pr) & (between(pr, ipw_ps_lower_bound, ipw_ps_upper_bound, incbounds = FALSE))]
       gc()
+
+      count_dropped <- (count_ES_initial-dim(ES_data)[1])
+
+      flog.info((sprintf("\n Warning: Droppped %s (of %s initial observations in stacked data) due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s had a NA propensity score \n 2) %s had a Inf/-Inf propensity score \n 3) %s had a propensity score <= %s \n 4) %s had a propensity score >= %s",
+                          format(count_dropped, scientific = FALSE, big.mark = ","),
+                          format(count_ES_initial, scientific = FALSE, big.mark = ","),
+                          round((count_pr_isna / count_dropped), digits = 4),
+                          round((count_pr_isinf / count_dropped), digits = 4),
+                          round((count_pr_extremelow / count_dropped), digits = 4),
+                          ipw_ps_lower_bound,
+                          round((count_pr_extremehigh / count_dropped), digits = 4),
+                          ipw_ps_upper_bound
+                        )
+                )
+                )
+
+      rm(count_ES_initial, count_pr_isna, count_pr_isinf, count_pr_extremelow, count_pr_extremehigh, count_dropped)
 
       ES_data[treated == 1, pw := 1]
       ES_data[treated == 0, pw := (pr / (1 - pr))]
