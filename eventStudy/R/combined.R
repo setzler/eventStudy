@@ -373,14 +373,14 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
       count_dropped <- (count_ES_initial-dim(ES_data)[1])
 
-      flog.info((sprintf("\n Warning: Droppped %s (of %s initial observations in stacked data) due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s had a NA propensity score \n 2) %s had a Inf/-Inf propensity score \n 3) %s had a propensity score <= %s \n 4) %s had a propensity score >= %s",
+      flog.info((sprintf("\n Warning: Droppped %s (of %s initial observations in stacked data) due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
                           format(count_dropped, scientific = FALSE, big.mark = ","),
                           format(count_ES_initial, scientific = FALSE, big.mark = ","),
-                          round((count_pr_isna / count_dropped), digits = 4),
-                          round((count_pr_isinf / count_dropped), digits = 4),
-                          round((count_pr_extremelow / count_dropped), digits = 4),
+                          round(((count_pr_isna / count_dropped) * 100), digits = 4),
+                          round(((count_pr_isinf / count_dropped) * 100), digits = 4),
+                          round(((count_pr_extremelow / count_dropped) * 100), digits = 4),
                           ipw_ps_lower_bound,
-                          round((count_pr_extremehigh / count_dropped), digits = 4),
+                          round(((count_pr_extremehigh / count_dropped) * 100), digits = 4),
                           ipw_ps_upper_bound
                         )
                 )
