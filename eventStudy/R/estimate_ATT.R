@@ -14,6 +14,7 @@ ES_estimate_ATT <- function(ES_data,
                             homogeneous_ATT = TRUE,
                             omitted_event_time = -2,
                             reg_weights = NULL,
+                            ref_reg_weights = NULL,
                             ipw = FALSE,
                             ipw_composition_change = FALSE,
                             add_unit_fes = FALSE
@@ -109,8 +110,8 @@ ES_estimate_ATT <- function(ES_data,
 
     if(ipw == TRUE){
 
-      if(!(is.null(reg_weights))){
-        ES_data[, pw := pw * get(reg_weights)]
+      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+        ES_data[, pw := pw * get(na.omit(unique(c(reg_weights, ref_reg_weights))))]
       }
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
@@ -120,9 +121,9 @@ ES_estimate_ATT <- function(ES_data,
 
     } else if(residualize_covariates == TRUE){
 
-      if(!(is.null(reg_weights))){
+      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                    data = ES_data, weights = ES_data[[reg_weights]],
+                    data = ES_data, weights = ES_data[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       } else{
@@ -137,9 +138,9 @@ ES_estimate_ATT <- function(ES_data,
       felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
       fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
 
-      if(!(is.null(reg_weights))){
+      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
-                    data = ES_data, weights = ES_data[[reg_weights]],
+                    data = ES_data, weights = ES_data[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       } else{
@@ -206,8 +207,8 @@ ES_estimate_ATT <- function(ES_data,
 
     if(ipw == TRUE){
 
-      if(!(is.null(reg_weights))){
-        ES_data[, pw := pw * get(reg_weights)]
+      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+        ES_data[, pw := pw * get(na.omit(unique(c(reg_weights, ref_reg_weights))))]
       }
 
       est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
@@ -217,9 +218,9 @@ ES_estimate_ATT <- function(ES_data,
 
     } else if(residualize_covariates == TRUE){
 
-      if(!(is.null(reg_weights))){
+      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                    data = ES_data, weights = ES_data[[reg_weights]],
+                    data = ES_data, weights = ES_data[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       } else{
@@ -234,9 +235,9 @@ ES_estimate_ATT <- function(ES_data,
       felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
       fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
 
-      if(!(is.null(reg_weights))){
+      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
         est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
-                    data = ES_data, weights = ES_data[[reg_weights]],
+                    data = ES_data, weights = ES_data[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
                     nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
         )
       } else{
@@ -281,13 +282,13 @@ ES_estimate_ATT <- function(ES_data,
 
   if(homogeneous_ATT == FALSE & ipw == TRUE){
     flog.info("Estimated heterogeneous case with WLS using IPW.")
-  } else if(homogeneous_ATT == FALSE & ipw == FALSE & is.null(reg_weights)){
+  } else if(homogeneous_ATT == FALSE & ipw == FALSE & is.null(reg_weights) & is.null(ref_reg_weights)){
     flog.info("Estimated heterogeneous case with OLS.")
-  } else if(homogeneous_ATT == FALSE & ipw == FALSE & (!(is.null(reg_weights)))){
+  } else if(homogeneous_ATT == FALSE & ipw == FALSE & (!(is.null(reg_weights)) | !(is.null(ref_reg_weights)))){
     flog.info("Estimated heterogeneous case with WLS.")
   } else if(homogeneous_ATT == TRUE & ipw == TRUE){
     flog.info("Estimated homogeneous case with WLS using IPW.")
-  } else if(homogeneous_ATT == TRUE & ipw == FALSE & is.null(reg_weights)){
+  } else if(homogeneous_ATT == TRUE & ipw == FALSE & is.null(reg_weights) & is.null(ref_reg_weights)){
     flog.info("Estimated homogeneous case with OLS.")
   } else{
     flog.info("Estimated homogeneous case with WLS.")
@@ -311,6 +312,7 @@ ES_make_ipw_dt <- function(did_dt,
                            ref_cont_covars = NULL,
                            omitted_event_time = -2,
                            reg_weights = NULL,
+                           ref_reg_weights = NULL,
                            ipw_model = "linear",
                            ipw_composition_change = FALSE){
 
@@ -326,7 +328,8 @@ ES_make_ipw_dt <- function(did_dt,
         d_name <- sprintf("%s_pre", d)
         did_dt[, has_d_pre := max(as.integer((!is.na(get(d))) * (ref_event_time == omitted_event_time))), by = list(get(unit_var))]
         did_dt <- did_dt[has_d_pre == 1] # these will be the only obs used anyway when estimating the propensity score
-        did_dt[, (d_name) := max(get(d) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
+        # use sum() instead of max() below in case 'd' takes on negative values (as max() would then return 0)
+        did_dt[, (d_name) := sum(get(d) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
         did_dt[, has_d_pre := NULL]
         gc()
         pre_discrete_covars = c(pre_discrete_covars, d_name)
@@ -347,7 +350,8 @@ ES_make_ipw_dt <- function(did_dt,
         c_name <- sprintf("%s_pre", c)
         did_dt[, has_c_pre := max(as.integer((!is.na(get(c))) * (ref_event_time == omitted_event_time))), by = list(get(unit_var))]
         did_dt <- did_dt[has_c_pre == 1]  # these will be the only obs used anyway when estimating the propensity score
-        did_dt[, (c_name) := max(get(c) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
+        # use sum() instead of max() below in case 'c' takes on negative values (as max() would then return 0)
+        did_dt[, (c_name) := sum(get(c) * (ref_event_time == omitted_event_time)), by = list(get(unit_var))]
         did_dt[, has_c_pre := NULL]
         gc()
         pre_cont_covars = c(pre_cont_covars, c_name)
@@ -386,14 +390,14 @@ ES_make_ipw_dt <- function(did_dt,
     }
 
     if(ipw_model == "linear"){
-      if(!is.null(reg_weights)){
-        did_dt[, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),data = did_dt, weights = did_dt[[reg_weights]]), type = "response")]
+      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+        did_dt[, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),data = did_dt, weights = did_dt[[na.omit(unique(c(reg_weights, ref_reg_weights)))]]), type = "response")]
       } else{
         did_dt[, pr := predict(lm(as.formula(paste0("treated ~ ", formula_input)),data = did_dt), type = "response")]
       }
     } else if(ipw_model %in% c("logit", "probit")){
-      if(!is.null(reg_weights)){
-        did_dt[, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input)),family = quasibinomial(link = ipw_model), data = did_dt, weights = did_dt[[reg_weights]]), type = "response")]
+      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+        did_dt[, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input)),family = quasibinomial(link = ipw_model), data = did_dt, weights = did_dt[[na.omit(unique(c(reg_weights, ref_reg_weights)))]]), type = "response")]
       } else{
         did_dt[, pr := predict(glm(as.formula(paste0("treated ~ ", formula_input)),family = quasibinomial(link = ipw_model), data = did_dt), type = "response")]
       }

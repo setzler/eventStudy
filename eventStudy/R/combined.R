@@ -1,15 +1,19 @@
 #' @export
 ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
-               omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
+               omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
+               linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
                control_subset_var=NA, control_subset_event_time=0,
                treated_subset_var=NA, treated_subset_event_time=0,
-               fill_zeros=FALSE, residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
+               control_subset_var2=NA, control_subset_event_time2=0,
+               treated_subset_var2=NA, treated_subset_event_time2=0,
+               discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
                homogeneous_ATT = FALSE, num_cores = 1, reg_weights = NULL, add_unit_fes = FALSE,
                bootstrapES = FALSE, bootstrap_iters = 1,
                ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_data = FALSE, ipw_ps_lower_bound = 0, ipw_ps_upper_bound = 1,
                event_vs_noevent = FALSE,
                ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
-               calculate_collapse_estimates = FALSE, collapse_inputs = NULL){
+               calculate_collapse_estimates = FALSE, collapse_inputs = NULL,
+               ref_reg_weights = NULL, ref_reg_weights_event_time=0){
 
   flog.info("Beginning ES.")
 
@@ -31,11 +35,28 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   if(!is.na(control_subset_var)){
     assertCharacter(control_subset_var,len=1)
   }
-  assertIntegerish(control_subset_event_time,len=1)
   if(!is.na(treated_subset_var)){
     assertCharacter(treated_subset_var,len=1)
   }
+  if(!is.na(control_subset_var2)){
+    assertCharacter(control_subset_var2,len=1)
+  }
+  if(!is.na(treated_subset_var2)){
+    assertCharacter(treated_subset_var2,len=1)
+  }
+  if(!is.null(reg_weights)){
+    assertCharacter(reg_weights,len=1)
+  }
+  if(!is.null(ref_reg_weights)){
+    assertCharacter(ref_reg_weights,len=1)
+  }
+  assertIntegerish(control_subset_event_time,len=1)
   assertIntegerish(treated_subset_event_time,len=1)
+  assertIntegerish(control_subset_event_time2,len=1)
+  assertIntegerish(treated_subset_event_time2,len=1)
+  assertIntegerish(ref_discrete_covar_event_time,len=1)
+  assertIntegerish(ref_cont_covar_event_time,len=1)
+  assertIntegerish(ref_reg_weights_event_time,len=1)
   assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
   assertFlag(residualize_covariates)
@@ -82,6 +103,14 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     if(!(treated_subset_var %in% names(long_data))){stop(sprintf("Variable treated_subset_var='%s' is not in the long_data you provided.",treated_subset_var))}
     if(!(long_data[,typeof(get(treated_subset_var))]=="logical")){stop(sprintf("Variable treated_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var))}
   }
+  if(!is.na(control_subset_var2)){
+    if(!(control_subset_var2 %in% names(long_data))){stop(sprintf("Variable control_subset_var2='%s' is not in the long_data you provided.",control_subset_var2))}
+    if(!(long_data[,typeof(get(control_subset_var2))]=="logical")){stop(sprintf("Variable control_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var2))}
+  }
+  if(!is.na(treated_subset_var2)){
+    if(!(treated_subset_var2 %in% names(long_data))){stop(sprintf("Variable treated_subset_var2='%s' is not in the long_data you provided.",treated_subset_var2))}
+    if(!(long_data[,typeof(get(treated_subset_var2))]=="logical")){stop(sprintf("Variable treated_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var2))}
+  }
   if(testCharacter(discrete_covars)){
     for(vv in discrete_covars){
       if(!(vv %in% names(long_data))){stop(sprintf("Variable discrete_covars='%s' is not in the long_data you provided.",vv))}
@@ -92,22 +121,23 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       if(!(vv %in% names(long_data))){stop(sprintf("Variable cont_covars='%s' is not in the long_data you provided.",vv))}
     }
   }
-  if(testCharacter(reg_weights)){
-    if(!(reg_weights %in% names(long_data))){stop(sprintf("Variable reg_weights='%s' is not in the long_data you provided.",reg_weights))}
-  }
   if(testCharacter(ref_discrete_covars)){
     for(vv in ref_discrete_covars){
       if(!(vv %in% names(long_data))){stop(sprintf("Variable ref_discrete_covars='%s' is not in the long_data you provided.",vv))}
     }
   }
-  assertIntegerish(ref_discrete_covar_event_time,len=1)
-
   if(testCharacter(ref_cont_covars)){
     for(vv in ref_cont_covars){
       if(!(vv %in% names(long_data))){stop(sprintf("Variable ref_cont_covars='%s' is not in the long_data you provided.",vv))}
     }
   }
-  assertIntegerish(ref_cont_covar_event_time,len=1)
+  if(testCharacter(reg_weights)){
+    if(!(reg_weights %in% names(long_data))){stop(sprintf("Variable reg_weights='%s' is not in the long_data you provided.",reg_weights))}
+  }
+
+  if(testCharacter(ref_reg_weights)){
+    if(!(ref_reg_weights %in% names(long_data))){stop(sprintf("Variable ref_reg_weights='%s' is not in the long_data you provided.",ref_reg_weights))}
+  }
 
   # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var or unit_var)
   if(add_unit_fes == TRUE){
@@ -115,7 +145,6 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   } else{
     design_vars <- c(cal_time_var, onset_time_var)
   }
-
   if(testCharacter(discrete_covars)){
     for(vv in discrete_covars){
       if(vv %in% design_vars){stop(sprintf("Variable discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
@@ -125,6 +154,21 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     for(vv in cont_covars){
       if(vv %in% design_vars){stop(sprintf("Variable cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
     }
+  }
+  if(testCharacter(ref_discrete_covars)){
+    for(vv in ref_discrete_covars){
+      if(vv %in% design_vars){stop(sprintf("Variable ref_discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
+    }
+  }
+  if(testCharacter(ref_cont_covars)){
+    for(vv in ref_cont_covars){
+      if(vv %in% design_vars){stop(sprintf("Variable ref_cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
+    }
+  }
+
+  # check that user only supplied one of reg_weights / ref_reg_weights, but not both
+  if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
+    stop("Supplied variables for both reg_weights and ref_reg_weights, but ES() only admits using one or the other type of weight (or neither).")
   }
 
   # check that user correctly input what to do with never treated
@@ -152,7 +196,6 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       stop(sprintf("ipw_model='%s' is not among allowed values (c('linear', 'logit', 'probit')).", ipw_model))
     }
   }
-
   if(ipw_ps_lower_bound > ipw_ps_upper_bound){
     stop(sprintf("ipw_ps_lower_bound='%s' & ipw_ps_upper_bound='%s', which means ipw_ps_lower_bound > ipw_ps_upper_bound. Consider revising these cutoffs.", ipw_ps_lower_bound, ipw_ps_upper_bound))
   }
@@ -226,9 +269,11 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
                            control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
                            treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
+                           control_subset_var2 = control_subset_var2, control_subset_event_time2 = control_subset_event_time2,
+                           treated_subset_var2 = treated_subset_var2, treated_subset_event_time2 = treated_subset_event_time2,
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val,
                            cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights, event_vs_noevent = event_vs_noevent,
-                           ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars)
+                           ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars, ref_reg_weights = ref_reg_weights)
 
   # construct discrete covariates specific to a ref_event_time
   # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
@@ -239,7 +284,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
     for(var in ref_discrete_covars){
 
-      # If, for some reason, there is overlap between discrete_covars and ref_discrete_covars, want to make sure not to overwrite
+      # If, for some reason, there is overlap (in variable name) between discrete_covars and ref_discrete_covars, want to make sure not to overwrite
       if(var %in% discrete_covars){
 
         varname <- sprintf("%s_dyn", var)
@@ -253,7 +298,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
         }
 
         # Define the time-invariant outcome for all units within a ref_onset_time
-        ES_data[, (varname) := max(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
+        ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
 
       } else{
 
@@ -268,7 +314,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
         }
 
         # Define the time-invariant outcome for all units within a ref_onset_time
-        ES_data[, (varname) := max(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
+        ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
 
       }
 
@@ -285,33 +332,35 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
   if(!is.null(ref_cont_covars)){
 
-    # Will construct this control variable which will be time-invariant, but defined as of the omitted_event_time relative to each ref_onset_time
+    # Will construct this control variable which will be time-invariant, but defined as of the ref_cont_covar_event_time relative to each ref_onset_time
     # Shouldn't have any missings, but in the code, will just treat this as another category
 
     start_cols <- copy(colnames(ES_data))
 
     for(var in ref_cont_covars){
 
-      # If, for some reason, there is overlap between cont_covars and ref_cont_covars, want to make sure not to overwrite
+      # If, for some reason, there is overlap (in variable name) between cont_covars and ref_cont_covars, want to make sure not to overwrite
       if(var %in% cont_covars){
 
         varname <- sprintf("%s_dyn", var)
 
         # Define the time-invariant outcome for all units within a ref_onset_time
         if(class(ES_data[[var]]) == "integer"){
-          # needed to include type checks as max() often converts from integer to numeric
-          ES_data[, (varname) := max(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+          # needed to include type checks as sum() often converts from integer to numeric
+          # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
+          ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
         } else{
-          ES_data[, (varname) := max(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
         }
       } else{
 
         # Define the time-invariant outcome for all units within a ref_onset_time
         if(class(ES_data[[var]]) == "integer"){
-          # needed to include type checks as max() often converts from integer to numeric
-          ES_data[, (var) := max(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+          # needed to include type checks as sum() often converts from integer to numeric
+          # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
+          ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
         } else{
-          ES_data[, (var) := max(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
         }
 
       }
@@ -322,6 +371,50 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     # When these are used later in estimation, the loop is over unique values in the intersection of cont_covars and ref_cont_covars
     ref_cont_covars <- unique(na.omit(c(ref_cont_covars, setdiff(colnames(ES_data), start_cols))))
     rm(start_cols)
+  }
+
+  # construct regression weights specific to a ref_event_time
+  # will be time invariant for a given ref_onset_time, but time-varying across ref_onset_times
+
+  if(!is.null(ref_reg_weights)){
+
+    # Will construct this weight variable which will be time-invariant, but defined as of the ref_reg_weights_event_time relative to each ref_onset_time
+    # Shouldn't have any missings, but in the code, will just treat this as another category
+
+    # Unlike other two types of ref_* vars, no need to check for variable name overlap here with reg_weights
+    # as we don't allow using both reg_weight and ref_reg_weights
+
+    # Define the time-invariant outcome for all units within a ref_onset_time
+    if(class(ES_data[[ref_reg_weights]]) == "integer"){
+      # needed to include type checks as sum() often converts from integer to numeric
+      # use sum() instead of max() just to parallel earlier code; wouldn't anticipate negative values in a weight variable
+      ES_data[, (ref_reg_weights) := sum(as.integer(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time))), by=c(unit_var, "ref_onset_time")]
+    } else{
+      ES_data[, (ref_reg_weights) := sum(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time)), by=c(unit_var, "ref_onset_time")]
+    }
+
+    # remove any cases with ref_reg_weights == 0, -Inf, Inf, or NA
+    count_ES_initial <- dim(ES_data)[1]
+    count_ref_reg_weights_isna <- dim(ES_data[is.na(get(ref_reg_weights))])[1]
+    count_ref_reg_weights_isinf <- dim(ES_data[is.infinite(get(ref_reg_weights))])[1]
+    count_ref_reg_weights_iszero <- dim(ES_data[get(ref_reg_weights) == 0])[1]
+
+    ES_data <- ES_data[(!is.na(get(ref_reg_weights))) & (!is.infinite(get(ref_reg_weights))) & (get(ref_reg_weights) != 0)]
+    gc()
+
+    count_dropped <- (count_ES_initial-dim(ES_data)[1])
+    rm(count_ES_initial)
+
+    flog.info((sprintf("\n Warning: Droppped %s due to missing or extreme ref_reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA ref_reg_weights \n 2) %s%% had Inf/-Inf ref_reg_weights \n 3) %s%% had ref_reg_weights == 0",
+                       format(count_dropped, scientific = FALSE, big.mark = ","),
+                       round(((count_ref_reg_weights_isna / count_dropped) * 100), digits = 4),
+                       round(((count_ref_reg_weights_isinf / count_dropped) * 100), digits = 4),
+                       round(((count_ref_reg_weights_iszero / count_dropped) * 100), digits = 4)
+    )
+    )
+    )
+    rm(count_ref_reg_weights_isna, count_ref_reg_weights_isinf, count_ref_reg_weights_iszero, count_dropped)
+    gc()
   }
 
   # estimate inverse probability weights, if relevant
@@ -347,6 +440,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                  omitted_event_time = omitted_event_time,
                                  ipw_model = ipw_model,
                                  reg_weights = reg_weights,
+                                 ref_reg_weights = ref_reg_weights,
                                  ipw_composition_change = ipw_composition_change
         )
         ipw_dt[, did_id := i]
@@ -372,10 +466,10 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       gc()
 
       count_dropped <- (count_ES_initial-dim(ES_data)[1])
+      rm(count_ES_initial)
 
-      flog.info((sprintf("\n Warning: Droppped %s (of %s initial observations in stacked data) due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
+      flog.info((sprintf("\n Warning: Droppped %s due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
                           format(count_dropped, scientific = FALSE, big.mark = ","),
-                          format(count_ES_initial, scientific = FALSE, big.mark = ","),
                           round(((count_pr_isna / count_dropped) * 100), digits = 4),
                           round(((count_pr_isinf / count_dropped) * 100), digits = 4),
                           round(((count_pr_extremelow / count_dropped) * 100), digits = 4),
@@ -386,7 +480,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                 )
                 )
 
-      rm(count_ES_initial, count_pr_isna, count_pr_isinf, count_pr_extremelow, count_pr_extremehigh, count_dropped)
+      rm(count_pr_isna, count_pr_isinf, count_pr_extremelow, count_pr_extremehigh, count_dropped)
 
       ES_data[treated == 1, pw := 1]
       ES_data[treated == 0, pw := (pr / (1 - pr))]
@@ -413,6 +507,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                          ref_cont_covars = ref_cont_covars,
                                          residualize_covariates = residualize_covariates,
                                          reg_weights = reg_weights,
+                                         ref_reg_weights = ref_reg_weights,
                                          ipw = ipw,
                                          ipw_composition_change = ipw_composition_change,
                                          add_unit_fes = add_unit_fes)
@@ -439,31 +534,32 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                      ref_cont_covars = ref_cont_covars,
                                      residualize_covariates = residualize_covariates,
                                      reg_weights = reg_weights,
+                                     ref_reg_weights = ref_reg_weights,
                                      ipw = ipw,
                                      ipw_composition_change = ipw_composition_change,
                                      add_unit_fes = add_unit_fes)[[1]]
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect levels by treatment/control
-  if(!(is.null(reg_weights))){
+  if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
     # STILL NEED TO FIX THE SEs to be WEIGHTED; for now use unweighted
-    ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = weighted.mean(get(outcomevar), get(reg_weights)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+    ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = weighted.mean(get(outcomevar), get(na.omit(unique(c(reg_weights, ref_reg_weights))))), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
   } else{
     ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = mean(get(outcomevar)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
   }
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
   # as we won't have an estimate for the omitted_event_time, exclude it below
-  if(!(is.null(reg_weights))){
-    catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+  if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+    catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = sum(get(na.omit(unique(c(reg_weights, ref_reg_weights)))))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   } else{
     catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   }
 
   # collect count of treated+control units by each (ref_onset_time, ref_event_time) for V2 of population-weighted ATTs
   # as we won't have an estimate for the omitted_event_time, exclude it below
-  if(!(is.null(reg_weights))){
-    catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = sum(get(reg_weights))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+  if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+    catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = sum(get(na.omit(unique(c(reg_weights, ref_reg_weights)))))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   } else{
     catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
   }
@@ -742,6 +838,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                                  linearize_pretrends = linearize_pretrends,
                                                  control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
                                                  treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
+                                                 control_subset_var2 = control_subset_var2, control_subset_event_time2 = control_subset_event_time2,
+                                                 treated_subset_var2 = treated_subset_var2, treated_subset_event_time2 = treated_subset_event_time2,
                                                  fill_zeros = fill_zeros, residualize_covariates = residualize_covariates, discrete_covars = discrete_covars, cont_covars = cont_covars,
                                                  never_treat_action = never_treat_action, homogeneous_ATT = homogeneous_ATT, reg_weights = reg_weights, add_unit_fes = add_unit_fes,
                                                  ipw = ipw, ipw_model = ipw_model, ipw_composition_change = ipw_composition_change, ipw_data = FALSE,
@@ -1039,6 +1137,7 @@ block_sample <- function(long_data, unit_var, cal_time_var){
 bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                          omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf, linearize_pretrends=FALSE,
                          control_subset_var=NA, control_subset_event_time=0, treated_subset_var=NA, treated_subset_event_time=0,
+                         control_subset_var2=NA, control_subset_event_time2=0, treated_subset_var2=NA, treated_subset_event_time2=0,
                          fill_zeros=FALSE,
                          residualize_covariates = FALSE, discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
                          homogeneous_ATT = FALSE, reg_weights = NULL, add_unit_fes = FALSE,
@@ -1074,6 +1173,14 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     assertCharacter(treated_subset_var,len=1)
   }
   assertIntegerish(treated_subset_event_time,len=1)
+  if(!is.na(control_subset_var2)){
+    assertCharacter(control_subset_var2,len=1)
+  }
+  assertIntegerish(control_subset_event_time2,len=1)
+  if(!is.na(treated_subset_var2)){
+    assertCharacter(treated_subset_var2,len=1)
+  }
+  assertIntegerish(treated_subset_event_time2,len=1)
   assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
   assertFlag(residualize_covariates)
@@ -1113,6 +1220,14 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   if(!is.na(treated_subset_var)){
     if(!(treated_subset_var %in% names(bs_long_data))){stop(sprintf("Variable treated_subset_var='%s' is not in the bs_long_data you provided.",treated_subset_var))}
     if(!(bs_long_data[,typeof(get(treated_subset_var))]=="logical")){stop(sprintf("Variable treated_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var))}
+  }
+  if(!is.na(control_subset_var2)){
+    if(!(control_subset_var2 %in% names(bs_long_data))){stop(sprintf("Variable control_subset_var2='%s' is not in the bs_long_data you provided.",control_subset_var2))}
+    if(!(bs_long_data[,typeof(get(control_subset_var2))]=="logical")){stop(sprintf("Variable control_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var2))}
+  }
+  if(!is.na(treated_subset_var2)){
+    if(!(treated_subset_var2 %in% names(bs_long_data))){stop(sprintf("Variable treated_subset_var2='%s' is not in the bs_long_data you provided.",treated_subset_var2))}
+    if(!(bs_long_data[,typeof(get(treated_subset_var2))]=="logical")){stop(sprintf("Variable treated_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var2))}
   }
   if(testCharacter(discrete_covars)){
     for(vv in discrete_covars){
@@ -1224,6 +1339,8 @@ bootstrap_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                            anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
                            control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
                            treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
+                           control_subset_var2 = control_subset_var2, control_subset_event_time2 = control_subset_event_time2,
+                           treated_subset_var2 = treated_subset_var2, treated_subset_event_time2 = treated_subset_event_time2,
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val,
                            cluster_vars = NULL, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights,
                            event_vs_noevent = event_vs_noevent, ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars)
