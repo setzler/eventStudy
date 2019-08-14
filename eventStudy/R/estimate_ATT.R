@@ -1,5 +1,3 @@
-
-
 #' @export
 ES_estimate_ATT <- function(ES_data,
                             outcomevar,
@@ -50,8 +48,8 @@ ES_estimate_ATT <- function(ES_data,
     ES_data[, cluster_on_this := .GRP, by = cluster_vars]
     cluster_on_this <- "cluster_on_this"
   } else{
-      # White / robust SEs
-      cluster_on_this <- 0
+    # White / robust SEs
+    cluster_on_this <- 0
   }
 
   if(residualize_covariates == FALSE & ipw == FALSE){
@@ -412,7 +410,7 @@ ES_make_ipw_dt <- function(did_dt,
   return(did_dt)
 }
 
-
+# Note: ES_estimate_std_did() is out of date and not being supported at this time.
 ES_estimate_std_did <- function(long_data,
                                 outcomevar,
                                 unit_var,
@@ -488,7 +486,7 @@ ES_estimate_std_did <- function(long_data,
 
     est <- felm(as.formula(sprintf("%s ~ %s + factor(%s)*%s | %s | 0 | %s", outcomevar, event_time_form, onset_time_var, cal_time_var, fe_form, cluster_on_this)),
                 data = model_dt,
-      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+                nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
     )
     model_dt <- NULL
     gc()
@@ -496,7 +494,7 @@ ES_estimate_std_did <- function(long_data,
 
     est <- felm(as.formula(sprintf("%s ~ %s | %s | 0 | %s", outcomevar, event_time_form, fe_form, cluster_on_this)),
                 data = model_dt,
-      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
+                nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
     )
     model_dt <- NULL
     gc()

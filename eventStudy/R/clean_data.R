@@ -1,4 +1,3 @@
-
 #' @export
 ES_clean_data <- function(long_data,
                           outcomevar,
@@ -26,7 +25,12 @@ ES_clean_data <- function(long_data,
                           never_treat_val = NA,
                           reg_weights = NULL,
                           ref_reg_weights= NULL,
-                          event_vs_noevent = FALSE) {
+                          event_vs_noevent = FALSE,
+                          ntile_var = NULL,
+                          ntile_event_time = -2,
+                          ntiles = NA,
+                          ntile_var_value = NA,
+                          ntile_avg = FALSE) {
 
   # Restriction based on supplied omitted_event_time
 
@@ -87,7 +91,7 @@ ES_clean_data <- function(long_data,
       possible_treated_control <- list()
 
       possible_treated_control[[1]] <- long_data[relevant_subset == 1 & get(onset_time_var) == event_cohort,
-                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars))),
+                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var))),
                                                  with = FALSE
                                                  ]
       gc()
@@ -95,7 +99,7 @@ ES_clean_data <- function(long_data,
       possible_treated_control[[1]][, treated := 1]
 
       possible_treated_control[[2]] <- long_data[relevant_subset == 1 & between(get(onset_time_var), event_cohort + min_control_gap, event_cohort + max_control_gap, incbounds = TRUE),
-                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars))),
+                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var))),
                                                  with = FALSE
                                                  ]
 
@@ -147,6 +151,20 @@ ES_clean_data <- function(long_data,
       temp <- NULL
       gc()
 
+      if(!(is.null(ntile_var)) & ntile_avg == TRUE){
+
+        # Will be using the three-year mean of ntile_var instead of just omitted_event_time
+        # use sum() instead of max() as possible that ntile_var takes on negative values
+        possible_treated_control[, pre1 := sum((ref_event_time == -1)*get(ntile_var)), by = list(get(unit_var))]
+        possible_treated_control[, pre2 := sum((ref_event_time == -2)*get(ntile_var)), by = list(get(unit_var))]
+        possible_treated_control[, pre3 := sum((ref_event_time == -3)*get(ntile_var)), by = list(get(unit_var))]
+        possible_treated_control[, avg_ntile_var := ((pre1 + pre2 + pre3) / 3)]
+        possible_treated_control[, (ntile_var) := avg_ntile_var]
+        possible_treated_control[, avg_ntile_var := NULL]
+        gc()
+
+      }
+
       for (time_since_event in setdiff(years, omitted_event_time)) { # excluding focal cohort's omitted_event_time -- recall, panel such that all cohorts have omitted_event_time
 
         i <- i + 1
@@ -169,6 +187,34 @@ ES_clean_data <- function(long_data,
         gc()
         balanced_treated_control[[i]][, catt_specific_sample := i]
 
+        if(!(is.null(ntile_var))){
+
+          # constructing ntiles using the treated group
+          q = quantile(balanced_treated_control[[i]][treated == 1 & ref_event_time == ntile_event_time][[ntile_var]],
+                       probs = (seq(1,(ntiles-1), by =1) / ntiles)
+          )
+          gc()
+
+          # using sum() instead of max() in case ntile_var has negative values
+          balanced_treated_control[[i]][, relevant_level := sum(get(ntile_var) * (ref_event_time == ntile_event_time)), by = list(get(unit_var))]
+
+          # loop through a mapping of values of ntile_var to catt_ntile
+          # note: order of the loop is deliberate
+          balanced_treated_control[[i]][relevant_level > q[(ntiles-1)], catt_ntile := ntiles]
+          for(qt in ((ntiles-1):1)){
+            balanced_treated_control[[i]][relevant_level <= q[qt], catt_ntile := qt]
+          }
+
+          if(!(is.na(ntile_var_value))){
+            balanced_treated_control[[i]] <- balanced_treated_control[[i]][catt_ntile == ntile_var_value]
+            balanced_treated_control[[i]][, catt_ntile := NULL]
+          }
+          balanced_treated_control[[i]][, relevant_level := NULL]
+          rm(q)
+          gc()
+
+        }
+
       }
 
       possible_treated_control <- NULL
@@ -181,7 +227,7 @@ ES_clean_data <- function(long_data,
       balanced_treated_control <- na.omit(balanced_treated_control)
       gc()
 
-      stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated"))), with = FALSE]
+      stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated"))), with = FALSE]
       gc()
 
       balanced_treated_control <- NULL
@@ -248,7 +294,7 @@ ES_clean_data <- function(long_data,
 
   flog.info(sprintf("Successfully produced a stacked dataset with %s rows.",
                     format(dim(stack_across_cohorts_balanced_treated_control)[1], scientific = FALSE, big.mark = ","))
-            )
+  )
 
   return(stack_across_cohorts_balanced_treated_control)
 }
@@ -351,19 +397,19 @@ ES_residualize_covariates <- function(long_data,
     formula_input <- paste(paste0(na.omit(discrete_covar_formula_input), collapse = "+"),
                            paste0(na.omit(cont_covars), collapse = "+"),
                            sep = " + "
-                           )
+    )
 
   } else if(is.null(cont_covars) & !is.null(discrete_covars)){
 
     formula_input <- paste0(paste0(na.omit(discrete_covar_formula_input), collapse = "+"),
-                           paste0(na.omit(cont_covars), collapse = "+")
-                           )
+                            paste0(na.omit(cont_covars), collapse = "+")
+    )
 
   } else{
 
     formula_input <- paste0(paste0(na.omit(cont_covars), collapse = "+"),
-                           paste0(na.omit(discrete_covar_formula_input), collapse = "+")
-                           )
+                            paste0(na.omit(discrete_covar_formula_input), collapse = "+")
+    )
 
   }
 
@@ -443,7 +489,7 @@ ES_expand_to_balance <- function(long_data,
                                  cal_time_var,
                                  onset_time_var,
                                  time_invar_covars = NULL
-                                 ) {
+) {
 
   # Expand long_data to maximal balanced panel, introducing NAs where needed
   long_data <- setDT(long_data, key = c(unit_var, cal_time_var))[CJ(get(unit_var), get(cal_time_var), unique=TRUE)]
@@ -474,7 +520,7 @@ ES_expand_to_balance <- function(long_data,
 ES_subset_to_balance <- function(long_data,
                                  unit_var,
                                  cal_time_var
-                                 ) {
+) {
 
   # Just in case, we immediately make a copy of the input long_data and run everything on the full copy
   # Can revisit this to remove the copy for memory efficiency at a later point.
