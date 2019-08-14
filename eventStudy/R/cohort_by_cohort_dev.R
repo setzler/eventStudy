@@ -2010,7 +2010,6 @@ ES_estimate_ATT_by_cohort <- function(ES_data,
                 cohort_specific_levels <- sort(unique(cohort_dt[[var]]))
                 ref_level = cohort_specific_levels[round(length(cohort_specific_levels)/2)]
               }
-              print(c(var, ref_level)) # $@$ TO DELETE
               reference_lookup[[i]] <- data.table(varname = var, reference_level = as.character(ref_level))
 
               discrete_covar_formula_input <- c(discrete_covar_formula_input,
