@@ -1,5 +1,5 @@
 #' @export
-ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
+by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                          omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
                          linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
                          control_subset_var=NA, control_subset_event_time=0,
@@ -17,61 +17,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                          ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
                          cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
 
-  # long_data = copy(my_dt)
-  # outcomevar = "has_w2_wages"
-  # unit_var = "tin"
-  # cal_time_var = "tax_yr"
-  # onset_time_var = "win_yr"
-  # cluster_vars = "tin"
-  # omitted_event_time= -2
-  # anticipation = 0
-  # min_control_gap=1
-  # max_control_gap=Inf
-  # linearize_pretrends=FALSE
-  # fill_zeros=FALSE
-  # residualize_covariates = FALSE
-  # control_subset_var=NA
-  # control_subset_event_time=0
-  # treated_subset_var=NA
-  # treated_subset_event_time=0
-  # control_subset_var2=NA
-  # control_subset_event_time2=0
-  # treated_subset_var2=NA
-  # treated_subset_event_time2=0
-  # discrete_covars = NULL
-  # cont_covars = NULL
-  # never_treat_action = 'none'
-  # homogeneous_ATT = FALSE
-  # bootstrap_num_cores = 1
-  # reg_weights = NULL
-  # add_unit_fes = FALSE
-  # bootstrapES = TRUE
-  # bootstrap_iters = 3
-  # ipw = FALSE
-  # ipw_model = 'linear'
-  # ipw_composition_change = FALSE
-  # ipw_keep_data = FALSE
-  # ipw_ps_lower_bound = 0
-  # ipw_ps_upper_bound = 1
-  # event_vs_noevent = FALSE
-  # ref_discrete_covars = NULL
-  # ref_discrete_covar_event_time=0
-  # ref_cont_covars = NULL
-  # ref_cont_covar_event_time=0
-  # calculate_collapse_estimates = TRUE
-  # collapse_table <- data.table(a = c("name1","name2", "name3"),b = c(list(-7:-1), list(-3:2), list(2:6)))
-  # collapse_inputs = copy(collapse_table)
-  # ref_reg_weights = NULL
-  # ref_reg_weights_event_time=0
-  # ntile_var = "adult_eq_adjgross"
-  # ntile_event_time = -2
-  # ntiles = 4
-  # ntile_var_value = 1
-  # ntile_avg = TRUE
-  # cohort_by_cohort = TRUE
-  # cohort_by_cohort_num_cores = 1
-
-  flog.info("Beginning ES.")
+  flog.info("Beginning by_cohort_ES.")
 
   # type checks
   assertDataTable(long_data)
@@ -211,6 +157,11 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     stop(sprintf("ntile_event_time='%s', but currently code can only accept ntile_event_time == omitted_event_time (e.g., %s).", ntile_event_time, omitted_event_time))
   }
 
+  # check that calculate_collapse_estimates == TRUE only if homogeneous_ATT == FALSE
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE){
+    stop("Cannot have calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE. Consider setting homogeneous_ATT = FALSE.")
+  }
+
   # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var or unit_var)
   if(add_unit_fes == TRUE){
     design_vars <- c(cal_time_var, unit_var)
@@ -240,7 +191,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
   # check that user only supplied one of reg_weights / ref_reg_weights, but not both
   if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
-    stop("Supplied variables for both reg_weights and ref_reg_weights, but ES() only admits using one or the other type of weight (or neither).")
+    stop("Supplied variables for both reg_weights and ref_reg_weights, but by_cohort_ES() only admits using one or the other type of weight (or neither).")
   }
 
   # check that user correctly input what to do with never treated
@@ -255,7 +206,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   }
 
   # warning if cluster_vars = NULL
-  if(is.null(cluster_vars)){warning(sprintf("Supplied cluster_vars = NULL; given stacking in ES(), standard errors may be too small. Consider cluster_vars='%s' instead.", unit_var))}
+  if(is.null(cluster_vars)){warning(sprintf("Supplied cluster_vars = NULL; given stacking in by_cohort_ES(), standard errors may be too small. Consider cluster_vars='%s' instead.", unit_var))}
 
   # warning if supplied bootstrap_num_cores*cohort_by_cohort_num_cores exceeds detectCores() - 1
   # not a perfect test (even as an upper bound) as results of detectCores() may be OS-dependent, may not respect cluster allocation limits, etc.
@@ -287,7 +238,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   # if user will be producing bootstrap SEs, want to preserve a copy of the data as it is now;
   # otherwise, potential for changes to underlying sample in subsequent steps
   if(bootstrapES == TRUE){
-    orig_sample <- copy(long_data)
+    original_sample <- copy(long_data)
   }
 
   # edit long_data in line with supplied never_treat_action option
@@ -600,7 +551,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
-    ES_results_hetero <- ES_estimate_ATT_by_cohort(ES_data = ES_data,
+    ES_results_hetero <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
                                                    outcomevar=outcomevar,
                                                    unit_var = unit_var,
                                                    onset_time_var = onset_time_var,
@@ -620,16 +571,19 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                                                    cohort_by_cohort = cohort_by_cohort,
                                                    cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)
 
+    gc()
+
     catt_coefs <- ES_results_hetero[[2]]
     catt_vcov <- ES_results_hetero[[3]]
 
     ES_results_hetero <- ES_results_hetero[[1]]
+    gc()
 
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
     ES_results_hetero <- NULL
   }
-  ES_results_homo <- ES_estimate_ATT_by_cohort(ES_data = ES_data,
+  ES_results_homo <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
                                                outcomevar=outcomevar,
                                                unit_var = unit_var,
                                                onset_time_var = onset_time_var,
@@ -648,6 +602,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                                                add_unit_fes = add_unit_fes,
                                                cohort_by_cohort = cohort_by_cohort,
                                                cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+  gc()
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect levels by treatment/control
@@ -669,8 +624,6 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   mapping <- mapping[ref_event_time != omitted_event_time]
   means <- merge(means, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
   treat_means <- merge(treat_means, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
-
-  means <- list(means, treat_means)
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
   # as we won't have an estimate for the omitted_event_time, exclude it below
@@ -695,7 +648,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
   # collect count of unique units that will be (implicitly) used to estimate collapsed estimates
   # will merge these onto figdata at the very end (if relevant)
-  if(calculate_collapse_estimates == TRUE){
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
 
     # quick copy to prevent from editing the supplied collapse_inputs directly
     collapse_input_dt <- copy(collapse_inputs)
@@ -774,74 +727,77 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   figdata <- rbindlist(list(figdata, unweighted, weighted_V1, weighted_V2), use.names = TRUE, fill=TRUE)
   figdata[is.na(cluster_se), cluster_se := 0]
 
-  # calculate SEs for weighted avg estimates using catt_coefs and catt_vcov
-  # the unique "Weighted" ref_event_time values represent the target list of parameters
-  # for each such ref_event_time, want to extract the location (number) of the relevant parameters in catt_coefs
-  # then will need to grab the relevant weight, and then construct the formula to supply to delta_method()
+  if(homogeneous_ATT == FALSE){
 
-  event_times <- setdiff(figdata[, sort(unique(ref_event_time))], omitted_event_time)
-  onset_times <- as.integer(figdata[rn == "catt", sort(unique(ref_onset_time))])
+    # calculate SEs for weighted avg estimates using catt_coefs and catt_vcov
+    # the unique "Weighted" ref_event_time values represent the target list of parameters
+    # for each such ref_event_time, want to extract the location (number) of the relevant parameters in catt_coefs
+    # then will need to grab the relevant weight, and then construct the formula to supply to delta_method()
 
-  min_onset_time <- min(onset_times)
-  max_onset_time <- max(onset_times)
+    event_times <- setdiff(figdata[, sort(unique(ref_event_time))], omitted_event_time)
+    onset_times <- as.integer(figdata[rn == "catt", sort(unique(ref_onset_time))])
 
-  for(et in event_times){
+    min_onset_time <- min(onset_times)
+    max_onset_time <- max(onset_times)
 
-    if(et < 0){
-      lookfor <- sprintf("cattlead%s$", abs(et))
-      # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
-    } else{
-      lookfor <- sprintf("catt%s$", abs(et))
-      # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+    for(et in event_times){
+
+      if(et < 0){
+        lookfor <- sprintf("cattlead%s$", abs(et))
+        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
+      } else{
+        lookfor <- sprintf("catt%s$", abs(et))
+        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+      }
+      coef_indices <- grep(lookfor, names(catt_coefs))
+      rm(lookfor)
+      temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
+      setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
+      rm(coef_indices)
+      temp[, estimate := NULL]
+      temp[, rn := gsub("lead", "-", rn)]
+      for (c in min_onset_time:max_onset_time) {
+        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
+        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
+      }
+      temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
+      temp[, rn := NULL]
+      temp[, ref_onset_time := as.character(ref_onset_time)]
+
+      # now merge in the weights
+      temp <- merge(temp, figdata[rn == "catt"], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+      temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, cohort_weight_V1, cohort_weight_V2)]
+      temp[, equal_weight := 1 / .N]
+
+      temp[, equal_w_formula_entry := sprintf("(%s*x%s)", equal_weight, coef_index)]
+      temp[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", cohort_weight_V1, coef_index)]
+      temp[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", cohort_weight_V2, coef_index)]
+
+      equal_w_g_formula_input = paste0(temp$equal_w_formula_entry, collapse = "+")
+      cohort_w_v1_g_formula_input = paste0(temp$cohort_w_v1_formula_entry, collapse = "+")
+      cohort_w_v2_g_formula_input = paste0(temp$cohort_w_v2_formula_entry, collapse = "+")
+
+      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Equally-Weighted",
+              cluster_se := delta_method(g = as.formula(paste("~", equal_w_g_formula_input)),
+                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
+              )
+              ]
+
+      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted",
+              cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v1_g_formula_input)),
+                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
+              )
+              ]
+
+      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted V2",
+              cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v2_g_formula_input)),
+                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
+              )
+              ]
+
+      rm(temp, equal_w_g_formula_input, cohort_w_v1_g_formula_input, cohort_w_v2_g_formula_input)
+
     }
-    coef_indices <- grep(lookfor, names(catt_coefs))
-    rm(lookfor)
-    temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
-    setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
-    rm(coef_indices)
-    temp[, estimate := NULL]
-    temp[, rn := gsub("lead", "-", rn)]
-    for (c in min_onset_time:max_onset_time) {
-      temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
-      temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
-    }
-    temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
-    temp[, rn := NULL]
-    temp[, ref_onset_time := as.character(ref_onset_time)]
-
-    # now merge in the weights
-    temp <- merge(temp, figdata[rn == "catt"], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
-    temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, cohort_weight_V1, cohort_weight_V2)]
-    temp[, equal_weight := 1 / .N]
-
-    temp[, equal_w_formula_entry := sprintf("(%s*x%s)", equal_weight, coef_index)]
-    temp[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", cohort_weight_V1, coef_index)]
-    temp[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", cohort_weight_V2, coef_index)]
-
-    equal_w_g_formula_input = paste0(temp$equal_w_formula_entry, collapse = "+")
-    cohort_w_v1_g_formula_input = paste0(temp$cohort_w_v1_formula_entry, collapse = "+")
-    cohort_w_v2_g_formula_input = paste0(temp$cohort_w_v2_formula_entry, collapse = "+")
-
-    figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Equally-Weighted",
-            cluster_se := delta_method(g = as.formula(paste("~", equal_w_g_formula_input)),
-                                       mean = catt_coefs, cov = catt_vcov, ses = TRUE
-            )
-            ]
-
-    figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted",
-            cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v1_g_formula_input)),
-                                       mean = catt_coefs, cov = catt_vcov, ses = TRUE
-            )
-            ]
-
-    figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted V2",
-            cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v2_g_formula_input)),
-                                       mean = catt_coefs, cov = catt_vcov, ses = TRUE
-            )
-            ]
-
-    rm(temp, equal_w_g_formula_input, cohort_w_v1_g_formula_input, cohort_w_v2_g_formula_input)
-
   }
 
   rm(subsets_for_avgs)
@@ -855,7 +811,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   figdata <- merge(figdata, event_time_total_unique_units, by = "ref_event_time", all.x = TRUE, sort = FALSE)
 
   # Now we calculate the collapsed estimates, if relevant
-  if(calculate_collapse_estimates == TRUE){
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
 
     # recall, ran 'collapse_input_dt <- copy(collapse_inputs)' earlier
     # and 'setnames(collapse_input_dt, c("name", "event_times"))
@@ -1019,13 +975,13 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   # start bootstrap run if relevant
   if(bootstrapES == TRUE){
 
-    # all arguments of bootstrap_ES are passed but for 'iter', which will be supplied by 1:bootstrap_iters below
+    # all arguments of by_cohort_bootstrap_ES are passed but for 'iter', which will be supplied by 1:bootstrap_iters below
     boot_results <- rbindlist(parallel::mclapply(X = 1:bootstrap_iters,
-                                                 FUN = bootstrap_ES_by_cohort,
+                                                 FUN = by_cohort_bootstrap_ES,
                                                  mc.silent = FALSE,
                                                  mc.cores = bootstrap_num_cores,
                                                  mc.set.seed = TRUE,
-                                                 long_data = orig_sample, outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var, cluster_vars = cluster_vars,
+                                                 long_data = original_sample, outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var, cluster_vars = cluster_vars,
                                                  omitted_event_time= omitted_event_time, anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap,
                                                  linearize_pretrends = linearize_pretrends, fill_zeros = fill_zeros, residualize_covariates = residualize_covariates,
                                                  control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
@@ -1044,7 +1000,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                               use.names = TRUE
     )
 
-    if(calculate_collapse_estimates == TRUE){
+    if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
       boot_results_collapse_estimates <- boot_results[!is.na(grouping)]
       boot_results <- boot_results[is.na(grouping)]
       boot_results[, grouping := NULL]
@@ -1059,7 +1015,7 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     rm(order_to_restore)
     figdata[rn == "treatment_means", bootstrap_se := NA]
 
-    if(calculate_collapse_estimates == TRUE){
+    if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
       boot_results_collapse_estimates_ses <- boot_results_collapse_estimates[, list(bootstrap_se_collapse = sd(estimate)), by = list(ref_onset_time, grouping)]
       order_to_restore <- na.omit(unique(c(copy(colnames(figdata)),copy(colnames(boot_results_collapse_estimates_ses)))))
       figdata <- merge(figdata, boot_results_collapse_estimates_ses, by = c("ref_onset_time", "grouping"), all.x = TRUE, sort = FALSE)
@@ -1069,31 +1025,32 @@ ES_by_cohort <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
       figdata[, bootstrap_se_collapse := NULL]
     }
 
-    orig_sample <- NULL
+    original_sample <- NULL
     gc()
 
   }
 
-  flog.info('ES is finished.')
-
-  building_blocks <- list(catt_coefs, catt_vcov)
-
   return_list = list()
   return_list[[1]] <- figdata
-  return_list[[2]] <- means
-  return_list[[3]] <- building_blocks
+  return_list[[2]] <- list(means, treat_means)
+
+  if(homogeneous_ATT == FALSE){
+    return_list[[3]] <- list(catt_coefs, catt_vcov)
+  }
 
   if(ipw_keep_data == TRUE){
     return_list[[4]] <- ipw_dt
   }
+
+  flog.info('by_cohort_ES is finished.')
 
   return(return_list)
 
 }
 
 #' @export
-# Need 'iter' to come first given how R reads the lapply/mclapply implementing bootstrap_ES()
-bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
+# Need 'iter' to come first given how R reads the lapply/mclapply implementing by_cohort_bootstrap_ES()
+by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                                    omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
                                    linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
                                    control_subset_var=NA, control_subset_event_time=0,
@@ -1110,13 +1067,13 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
                                    ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
                                    cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
 
-  # Function mirrors ES(), but with less printing/warning and skipping sections responsible for analytical standard errors and the like which aren't relevant
+  # Function mirrors by_cohort_ES(), but with less printing/warning and skipping sections responsible for analytical standard errors and the like which aren't relevant
   # We keep various checks to make sure no issues arise after the bootstrap sample is drawn
 
   bs_long_data <- block_sample(long_data = copy(long_data), unit_var = unit_var, cal_time_var = cal_time_var)
   gc()
 
-  flog.info(sprintf("Beginning ES_bootstrap iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+  flog.info(sprintf("Beginning bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
 
   # type checks
   assertDataTable(bs_long_data)
@@ -1253,6 +1210,11 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
     stop(sprintf("ntile_event_time='%s', but currently code can only accept ntile_event_time == omitted_event_time (e.g., %s).", ntile_event_time, omitted_event_time))
   }
 
+  # check that calculate_collapse_estimates == TRUE only if homogeneous_ATT == FALSE
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE){
+    stop("Cannot have calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE. Consider setting homogeneous_ATT = FALSE.")
+  }
+
   # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var or unit_var)
   if(add_unit_fes == TRUE){
     design_vars <- c(cal_time_var, unit_var)
@@ -1282,7 +1244,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # check that user only supplied one of reg_weights / ref_reg_weights, but not both
   if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
-    stop("Supplied variables for both reg_weights and ref_reg_weights, but ES() only admits using one or the other type of weight (or neither).")
+    stop("Supplied variables for both reg_weights and ref_reg_weights, but bootstrap_by_cohort_ES() only admits using one or the other type of weight (or neither).")
   }
 
   # check that user correctly input what to do with never treated
@@ -1321,7 +1283,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # fill with zeros
   if(fill_zeros){
-    flog.info(sprintf("Filling in zeros in ES_bootstrap iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+    flog.info(sprintf("Filling in zeros in bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
     bs_long_data <- ES_expand_to_balance(long_data = bs_long_data,
                                          vars_to_fill = outcomevar,
                                          unit_var = unit_var,
@@ -1342,7 +1304,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # linearize pre-trends; never-treated will be treated as a single cohort
   if(linearize_pretrends){
-    flog.info(sprintf("Linearizing pre-trends in ES_bootstrap iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+    flog.info(sprintf("Linearizing pre-trends in bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
     bs_long_data <- ES_parallelize_trends(long_data = bs_long_data, outcomevar = outcomevar,
                                           unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                                           anticipation = anticipation, reg_weights = reg_weights)
@@ -1350,7 +1312,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # extrapolate contribution of covariates using pre-treated period
   if(residualize_covariates){
-    flog.info(sprintf("Residualizing on covariates in ES_bootstrap iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+    flog.info(sprintf("Residualizing on covariates in bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
     bs_long_data <- ES_residualize_covariates(long_data = bs_long_data, outcomevar = outcomevar,
                                               unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                                               anticipation = anticipation, discrete_covars = discrete_covars, cont_covars = cont_covars,
@@ -1358,7 +1320,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
   }
 
   # process data
-  flog.info(sprintf("Beginning data stacking in ES_bootstrap iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+  flog.info(sprintf("Beginning data stacking in bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
   bs_ES_data <- ES_clean_data(long_data = bs_long_data, outcomevar = outcomevar,
                               unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                               anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
@@ -1547,7 +1509,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
-    ES_results_hetero <- ES_estimate_ATT_by_cohort(ES_data = bs_ES_data,
+    ES_results_hetero <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
                                                    outcomevar=outcomevar,
                                                    unit_var = unit_var,
                                                    onset_time_var = onset_time_var,
@@ -1566,11 +1528,12 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
                                                    add_unit_fes = add_unit_fes,
                                                    cohort_by_cohort = cohort_by_cohort,
                                                    cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+    gc()
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
     ES_results_hetero <- NULL
   }
-  ES_results_homo <- ES_estimate_ATT_by_cohort(ES_data = bs_ES_data,
+  ES_results_homo <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
                                                outcomevar=outcomevar,
                                                unit_var = unit_var,
                                                onset_time_var = onset_time_var,
@@ -1589,6 +1552,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
                                                add_unit_fes = add_unit_fes,
                                                cohort_by_cohort = cohort_by_cohort,
                                                cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+  gc()
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
@@ -1614,7 +1578,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # collect count of unique units that will be (implicitly) used to estimate collapsed estimates
   # will merge these onto figdata at the very end (if relevant)
-  if(calculate_collapse_estimates == TRUE){
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
 
     # quick copy to prevent from editing the supplied collapse_inputs directly
     collapse_input_dt <- copy(collapse_inputs)
@@ -1704,7 +1668,7 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
   figdata <- merge(figdata, event_time_total_unique_units, by = "ref_event_time", all.x = TRUE, sort = FALSE)
 
   # Now we calculate the collapsed estimates, if relevant
-  if(calculate_collapse_estimates == TRUE){
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
 
     # recall, ran 'collapse_input_dt <- copy(collapse_inputs)' earlier
     # and 'setnames(collapse_input_dt, c("name", "event_times"))
@@ -1776,13 +1740,13 @@ bootstrap_ES_by_cohort <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   figdata[, bootstrap_sample := iter]
 
-  flog.info(sprintf("ES_bootstrap iteration %s is finished.", format(iter, scientific = FALSE, big.mark = ",")))
+  flog.info(sprintf("bootstrap_by_cohort_ES iteration %s is finished.", format(iter, scientific = FALSE, big.mark = ",")))
 
   return(figdata)
 }
 
 #' @export
-ES_estimate_ATT_by_cohort <- function(ES_data,
+by_cohort_ES_estimate_ATT <- function(ES_data,
                                       outcomevar,
                                       unit_var,
                                       onset_time_var,

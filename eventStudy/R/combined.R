@@ -154,6 +154,11 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     stop(sprintf("ntile_event_time='%s', but currently code can only accept ntile_event_time == omitted_event_time (e.g., %s).", ntile_event_time, omitted_event_time))
   }
 
+  # check that calculate_collapse_estimates == TRUE only if homogeneous_ATT == FALSE
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE){
+    stop("Cannot have calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE. Consider setting homogeneous_ATT = FALSE.")
+  }
+
   # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var or unit_var)
   if(add_unit_fes == TRUE){
     design_vars <- c(cal_time_var, unit_var)
@@ -222,7 +227,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   # if user will be producing bootstrap SEs, want to preserve a copy of the data as it is now;
   # otherwise, potential for changes to underlying sample in subsequent steps
   if(bootstrapES == TRUE){
-    orig_sample <- copy(long_data)
+    original_sample <- copy(long_data)
   }
 
   # edit long_data in line with supplied never_treat_action option
@@ -535,7 +540,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
-    ES_results_hetero <- ES_estimate_ATT(ES_data = ES_data,
+    ES_results_hetero <- ES_estimate_ATT(ES_data = copy(ES_data),
                                          outcomevar=outcomevar,
                                          unit_var = unit_var,
                                          onset_time_var = onset_time_var,
@@ -553,16 +558,19 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                          ipw_composition_change = ipw_composition_change,
                                          add_unit_fes = add_unit_fes)
 
+    gc()
+
     catt_coefs <- ES_results_hetero[[2]]
     catt_vcov <- ES_results_hetero[[3]]
 
     ES_results_hetero <- ES_results_hetero[[1]]
+    gc()
 
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
     ES_results_hetero <- NULL
   }
-  ES_results_homo <- ES_estimate_ATT(ES_data = ES_data,
+  ES_results_homo <- ES_estimate_ATT(ES_data = copy(ES_data),
                                      outcomevar=outcomevar,
                                      unit_var = unit_var,
                                      onset_time_var = onset_time_var,
@@ -579,6 +587,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                      ipw = ipw,
                                      ipw_composition_change = ipw_composition_change,
                                      add_unit_fes = add_unit_fes)[[1]]
+  gc()
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect levels by treatment/control
@@ -612,7 +621,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
   # collect count of unique units that will be (implicitly) used to estimate collapsed estimates
   # will merge these onto figdata at the very end (if relevant)
-  if(calculate_collapse_estimates == TRUE){
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
 
     # quick copy to prevent from editing the supplied collapse_inputs directly
     collapse_input_dt <- copy(collapse_inputs)
@@ -691,74 +700,77 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   figdata <- rbindlist(list(figdata, unweighted, weighted_V1, weighted_V2), use.names = TRUE, fill=TRUE)
   figdata[is.na(cluster_se), cluster_se := 0]
 
-  # calculate SEs for weighted avg estimates using catt_coefs and catt_vcov
-  # the unique "Weighted" ref_event_time values represent the target list of parameters
-  # for each such ref_event_time, want to extract the location (number) of the relevant parameters in catt_coefs
-  # then will need to grab the relevant weight, and then construct the formula to supply to delta_method()
+  if(homogeneous_ATT == FALSE){
 
-  event_times <- setdiff(figdata[, sort(unique(ref_event_time))], omitted_event_time)
-  onset_times <- as.integer(figdata[rn == "catt", sort(unique(ref_onset_time))])
+    # calculate SEs for weighted avg estimates using catt_coefs and catt_vcov
+    # the unique "Weighted" ref_event_time values represent the target list of parameters
+    # for each such ref_event_time, want to extract the location (number) of the relevant parameters in catt_coefs
+    # then will need to grab the relevant weight, and then construct the formula to supply to delta_method()
 
-  min_onset_time <- min(onset_times)
-  max_onset_time <- max(onset_times)
+    event_times <- setdiff(figdata[, sort(unique(ref_event_time))], omitted_event_time)
+    onset_times <- as.integer(figdata[rn == "catt", sort(unique(ref_onset_time))])
 
-  for(et in event_times){
+    min_onset_time <- min(onset_times)
+    max_onset_time <- max(onset_times)
 
-    if(et < 0){
-      lookfor <- sprintf("cattlead%s$", abs(et))
-      # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
-    } else{
-      lookfor <- sprintf("catt%s$", abs(et))
-      # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+    for(et in event_times){
+
+      if(et < 0){
+        lookfor <- sprintf("cattlead%s$", abs(et))
+        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
+      } else{
+        lookfor <- sprintf("catt%s$", abs(et))
+        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+      }
+      coef_indices <- grep(lookfor, names(catt_coefs))
+      rm(lookfor)
+      temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
+      setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
+      rm(coef_indices)
+      temp[, estimate := NULL]
+      temp[, rn := gsub("lead", "-", rn)]
+      for (c in min_onset_time:max_onset_time) {
+        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
+        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
+      }
+      temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
+      temp[, rn := NULL]
+      temp[, ref_onset_time := as.character(ref_onset_time)]
+
+      # now merge in the weights
+      temp <- merge(temp, figdata[rn == "catt"], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+      temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, cohort_weight_V1, cohort_weight_V2)]
+      temp[, equal_weight := 1 / .N]
+
+      temp[, equal_w_formula_entry := sprintf("(%s*x%s)", equal_weight, coef_index)]
+      temp[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", cohort_weight_V1, coef_index)]
+      temp[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", cohort_weight_V2, coef_index)]
+
+      equal_w_g_formula_input = paste0(temp$equal_w_formula_entry, collapse = "+")
+      cohort_w_v1_g_formula_input = paste0(temp$cohort_w_v1_formula_entry, collapse = "+")
+      cohort_w_v2_g_formula_input = paste0(temp$cohort_w_v2_formula_entry, collapse = "+")
+
+      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Equally-Weighted",
+              cluster_se := delta_method(g = as.formula(paste("~", equal_w_g_formula_input)),
+                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
+              )
+              ]
+
+      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted",
+              cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v1_g_formula_input)),
+                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
+              )
+              ]
+
+      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted V2",
+              cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v2_g_formula_input)),
+                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
+              )
+              ]
+
+      rm(temp, equal_w_g_formula_input, cohort_w_v1_g_formula_input, cohort_w_v2_g_formula_input)
+
     }
-    coef_indices <- grep(lookfor, names(catt_coefs))
-    rm(lookfor)
-    temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
-    setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
-    rm(coef_indices)
-    temp[, estimate := NULL]
-    temp[, rn := gsub("lead", "-", rn)]
-    for (c in min_onset_time:max_onset_time) {
-      temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
-      temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
-    }
-    temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
-    temp[, rn := NULL]
-    temp[, ref_onset_time := as.character(ref_onset_time)]
-
-    # now merge in the weights
-    temp <- merge(temp, figdata[rn == "catt"], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
-    temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, cohort_weight_V1, cohort_weight_V2)]
-    temp[, equal_weight := 1 / .N]
-
-    temp[, equal_w_formula_entry := sprintf("(%s*x%s)", equal_weight, coef_index)]
-    temp[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", cohort_weight_V1, coef_index)]
-    temp[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", cohort_weight_V2, coef_index)]
-
-    equal_w_g_formula_input = paste0(temp$equal_w_formula_entry, collapse = "+")
-    cohort_w_v1_g_formula_input = paste0(temp$cohort_w_v1_formula_entry, collapse = "+")
-    cohort_w_v2_g_formula_input = paste0(temp$cohort_w_v2_formula_entry, collapse = "+")
-
-    figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Equally-Weighted",
-            cluster_se := delta_method(g = as.formula(paste("~", equal_w_g_formula_input)),
-                                      mean = catt_coefs, cov = catt_vcov, ses = TRUE
-            )
-            ]
-
-    figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted",
-            cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v1_g_formula_input)),
-                                      mean = catt_coefs, cov = catt_vcov, ses = TRUE
-            )
-            ]
-
-    figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted V2",
-            cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v2_g_formula_input)),
-                                      mean = catt_coefs, cov = catt_vcov, ses = TRUE
-            )
-            ]
-
-    rm(temp, equal_w_g_formula_input, cohort_w_v1_g_formula_input, cohort_w_v2_g_formula_input)
-
   }
 
   rm(subsets_for_avgs)
@@ -772,7 +784,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   figdata <- merge(figdata, event_time_total_unique_units, by = "ref_event_time", all.x = TRUE, sort = FALSE)
 
   # Now we calculate the collapsed estimates, if relevant
-  if(calculate_collapse_estimates == TRUE){
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
 
     # recall, ran 'collapse_input_dt <- copy(collapse_inputs)' earlier
     # and 'setnames(collapse_input_dt, c("name", "event_times"))
@@ -942,7 +954,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                                  mc.silent = FALSE,
                                                  mc.cores = bootstrap_num_cores,
                                                  mc.set.seed = TRUE,
-                                                 long_data = orig_sample, outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var, cluster_vars = cluster_vars,
+                                                 long_data = original_sample, outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var, cluster_vars = cluster_vars,
                                                  omitted_event_time= omitted_event_time, anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap,
                                                  linearize_pretrends = linearize_pretrends, fill_zeros = fill_zeros, residualize_covariates = residualize_covariates,
                                                  control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
@@ -960,7 +972,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                               use.names = TRUE
                               )
 
-    if(calculate_collapse_estimates == TRUE){
+    if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
       boot_results_collapse_estimates <- boot_results[!is.na(grouping)]
       boot_results <- boot_results[is.na(grouping)]
       boot_results[, grouping := NULL]
@@ -975,7 +987,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     rm(order_to_restore)
     figdata[rn == "treatment_means", bootstrap_se := NA]
 
-    if(calculate_collapse_estimates == TRUE){
+    if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
       boot_results_collapse_estimates_ses <- boot_results_collapse_estimates[, list(bootstrap_se_collapse = sd(estimate)), by = list(ref_onset_time, grouping)]
       order_to_restore <- na.omit(unique(c(copy(colnames(figdata)),copy(colnames(boot_results_collapse_estimates_ses)))))
       figdata <- merge(figdata, boot_results_collapse_estimates_ses, by = c("ref_onset_time", "grouping"), all.x = TRUE, sort = FALSE)
@@ -985,7 +997,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       figdata[, bootstrap_se_collapse := NULL]
     }
 
-    orig_sample <- NULL
+    original_sample <- NULL
     gc()
 
   }
@@ -1422,6 +1434,11 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
     stop(sprintf("ntile_event_time='%s', but currently code can only accept ntile_event_time == omitted_event_time (e.g., %s).", ntile_event_time, omitted_event_time))
   }
 
+  # check that calculate_collapse_estimates == TRUE only if homogeneous_ATT == FALSE
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE){
+    stop("Cannot have calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE. Consider setting homogeneous_ATT = FALSE.")
+  }
+
   # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var or unit_var)
   if(add_unit_fes == TRUE){
     design_vars <- c(cal_time_var, unit_var)
@@ -1716,7 +1733,7 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
-    ES_results_hetero <- ES_estimate_ATT(ES_data = bs_ES_data,
+    ES_results_hetero <- ES_estimate_ATT(ES_data = copy(bs_ES_data),
                                          outcomevar=outcomevar,
                                          unit_var = unit_var,
                                          onset_time_var = onset_time_var,
@@ -1733,11 +1750,12 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
                                          ipw = ipw,
                                          ipw_composition_change = ipw_composition_change,
                                          add_unit_fes = add_unit_fes)[[1]]
+    gc()
     setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
   } else{
     ES_results_hetero <- NULL
   }
-  ES_results_homo <- ES_estimate_ATT(ES_data = bs_ES_data,
+  ES_results_homo <- ES_estimate_ATT(ES_data = copy(bs_ES_data),
                                      outcomevar=outcomevar,
                                      unit_var = unit_var,
                                      onset_time_var = onset_time_var,
@@ -1754,6 +1772,7 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
                                      ipw = ipw,
                                      ipw_composition_change = ipw_composition_change,
                                      add_unit_fes = add_unit_fes)[[1]]
+  gc()
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
@@ -1779,7 +1798,7 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
 
   # collect count of unique units that will be (implicitly) used to estimate collapsed estimates
   # will merge these onto figdata at the very end (if relevant)
-  if(calculate_collapse_estimates == TRUE){
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
 
     # quick copy to prevent from editing the supplied collapse_inputs directly
     collapse_input_dt <- copy(collapse_inputs)
@@ -1869,7 +1888,7 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
   figdata <- merge(figdata, event_time_total_unique_units, by = "ref_event_time", all.x = TRUE, sort = FALSE)
 
   # Now we calculate the collapsed estimates, if relevant
-  if(calculate_collapse_estimates == TRUE){
+  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
 
     # recall, ran 'collapse_input_dt <- copy(collapse_inputs)' earlier
     # and 'setnames(collapse_input_dt, c("name", "event_times"))
