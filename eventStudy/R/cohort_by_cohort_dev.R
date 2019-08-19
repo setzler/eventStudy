@@ -8,7 +8,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                          treated_subset_var2=NA, treated_subset_event_time2=0,
                          discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
                          homogeneous_ATT = FALSE, reg_weights = NULL, add_unit_fes = FALSE,
-                         bootstrapES = FALSE, bootstrap_iters = 1, bootstrap_num_cores = 1,
+                         bootstrapES = FALSE, bootstrap_iters = 1, bootstrap_num_cores = 1, keep_all_bootstrap_results = FALSE,
                          ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_keep_data = FALSE, ipw_ps_lower_bound = 0, ipw_ps_upper_bound = 1,
                          event_vs_noevent = FALSE,
                          ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
@@ -72,6 +72,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   assertFlag(bootstrapES)
   assertIntegerish(bootstrap_iters,len=1,lower=1)
   assertIntegerish(bootstrap_num_cores,len=1,lower=1)
+  assertFlag(keep_all_bootstrap_results)
   assertFlag(ipw)
   assertFlag(ipw_composition_change)
   assertNumber(ipw_ps_lower_bound,lower=0,upper=1)
@@ -1000,6 +1001,10 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                               use.names = TRUE
     )
 
+    if(keep_all_bootstrap_results == TRUE){
+      bootstrap_output <- copy(boot_results)
+    }
+
     if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
       boot_results_collapse_estimates <- boot_results[!is.na(grouping)]
       boot_results <- boot_results[is.na(grouping)]
@@ -1040,6 +1045,10 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
   if(ipw_keep_data == TRUE){
     return_list[[4]] <- ipw_dt
+  }
+
+  if(keep_all_bootstrap_results == TRUE){
+    return_list[[5]] <- bootstrap_output
   }
 
   flog.info('by_cohort_ES is finished.')
