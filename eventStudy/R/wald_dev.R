@@ -1245,7 +1245,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
     return_list[[6]] <- ipw_dt
   }
 
-  if(keep_all_bootstrap_results == TRUE){
+  if(bootstrapES == TRUE & keep_all_bootstrap_results == TRUE){
     return_list[[7]] <- bootstrap_output
   }
 
