@@ -184,7 +184,9 @@ ES_clean_data <- function(long_data,
         # Code above ensures that I don't continue using the "omitted_event_time" observations for the control group after it
         # has become treated
 
-        balanced_treated_control[[i]] <- na.omit(balanced_treated_control[[i]])
+        balanced_treated_control[[i]] <- na.omit(balanced_treated_control[[i]],
+                                                 cols = unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ntile_var, endog_var, "ref_onset_time", "ref_event_time", "treated")))
+                                                 )
         gc()
         balanced_treated_control[[i]][, catt_specific_sample := i]
 
@@ -225,7 +227,9 @@ ES_clean_data <- function(long_data,
       # Will build up from the pieces of the prior step together with a catt_specific_sample dummy
 
       balanced_treated_control <- rbindlist(balanced_treated_control, use.names = TRUE)
-      balanced_treated_control <- na.omit(balanced_treated_control)
+      balanced_treated_control <- na.omit(balanced_treated_control,
+                                          cols = unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ntile_var, endog_var, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")))
+                                         )
       gc()
 
       stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var, endog_var, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated"))), with = FALSE]

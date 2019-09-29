@@ -275,14 +275,16 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     count_dropped <- (count_long_data_initial-dim(long_data)[1])
     rm(count_long_data_initial)
 
-    flog.info((sprintf("\n Warning: Droppped %s from long_data due to missing or extreme reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA reg_weights \n 2) %s%% had Inf/-Inf reg_weights \n 3) %s%% had reg_weights <= 0",
-                       format(count_dropped, scientific = FALSE, big.mark = ","),
-                       round(((count_reg_weights_isna / count_dropped) * 100), digits = 4),
-                       round(((count_reg_weights_isinf / count_dropped) * 100), digits = 4),
-                       round(((count_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
-    )
-    )
-    )
+    if(count_dropped != 0){
+      flog.info((sprintf("\n Warning: Droppped %s from long_data due to missing or extreme reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA reg_weights \n 2) %s%% had Inf/-Inf reg_weights \n 3) %s%% had reg_weights <= 0",
+                         format(count_dropped, scientific = FALSE, big.mark = ","),
+                         round(((count_reg_weights_isna / count_dropped) * 100), digits = 4),
+                         round(((count_reg_weights_isinf / count_dropped) * 100), digits = 4),
+                         round(((count_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
+      )
+      )
+      )
+    }
     rm(count_reg_weights_isna, count_reg_weights_isinf, count_reg_weights_nonpositive, count_dropped)
     gc()
 
@@ -451,14 +453,16 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     count_dropped <- (count_ES_initial-dim(ES_data)[1])
     rm(count_ES_initial)
 
-    flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme ref_reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA ref_reg_weights \n 2) %s%% had Inf/-Inf ref_reg_weights \n 3) %s%% had ref_reg_weights <= 0",
-                       format(count_dropped, scientific = FALSE, big.mark = ","),
-                       round(((count_ref_reg_weights_isna / count_dropped) * 100), digits = 4),
-                       round(((count_ref_reg_weights_isinf / count_dropped) * 100), digits = 4),
-                       round(((count_ref_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
-    )
-    )
-    )
+    if(count_dropped != 0){
+      flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme ref_reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA ref_reg_weights \n 2) %s%% had Inf/-Inf ref_reg_weights \n 3) %s%% had ref_reg_weights <= 0",
+                         format(count_dropped, scientific = FALSE, big.mark = ","),
+                         round(((count_ref_reg_weights_isna / count_dropped) * 100), digits = 4),
+                         round(((count_ref_reg_weights_isinf / count_dropped) * 100), digits = 4),
+                         round(((count_ref_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
+      )
+      )
+      )
+    }
     rm(count_ref_reg_weights_isna, count_ref_reg_weights_isinf, count_ref_reg_weights_nonpositive, count_dropped)
     gc()
   }
@@ -514,17 +518,19 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       count_dropped <- (count_ES_initial-dim(ES_data)[1])
       rm(count_ES_initial)
 
-      flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
-                         format(count_dropped, scientific = FALSE, big.mark = ","),
-                         round(((count_pr_isna / count_dropped) * 100), digits = 4),
-                         round(((count_pr_isinf / count_dropped) * 100), digits = 4),
-                         round(((count_pr_extremelow / count_dropped) * 100), digits = 4),
-                         ipw_ps_lower_bound,
-                         round(((count_pr_extremehigh / count_dropped) * 100), digits = 4),
-                         ipw_ps_upper_bound
-      )
-      )
-      )
+      if(count_dropped != 0){
+        flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
+                           format(count_dropped, scientific = FALSE, big.mark = ","),
+                           round(((count_pr_isna / count_dropped) * 100), digits = 4),
+                           round(((count_pr_isinf / count_dropped) * 100), digits = 4),
+                           round(((count_pr_extremelow / count_dropped) * 100), digits = 4),
+                           ipw_ps_lower_bound,
+                           round(((count_pr_extremehigh / count_dropped) * 100), digits = 4),
+                           ipw_ps_upper_bound
+        )
+        )
+        )
+      }
 
       rm(count_pr_isna, count_pr_isinf, count_pr_extremelow, count_pr_extremehigh, count_dropped)
 
