@@ -434,12 +434,12 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
     # Define the time-invariant outcome for all units within a ref_onset_time
     if(class(ES_data[[ref_reg_weights]]) == "integer"){
+      ES_data[, (ref_reg_weights) := as.numeric(get(ref_reg_weights))]
       # needed to include type checks as sum() often converts from integer to numeric
       # use sum() instead of max() just to parallel earlier code; wouldn't anticipate negative values in a weight variable
-      ES_data[, (ref_reg_weights) := sum(as.integer(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time))), by=c(unit_var, "ref_onset_time")]
-    } else{
-      ES_data[, (ref_reg_weights) := sum(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time)), by=c(unit_var, "ref_onset_time")]
     }
+    ES_data[, (ref_reg_weights) := unique(get(ref_reg_weights)[ref_event_time==ref_reg_weights_event_time],na.rm=T)[1], by=c(unit_var, "ref_onset_time")]
+
 
     # remove any cases with ref_reg_weights <= 0, -Inf, Inf, or NA
     count_ES_initial <- dim(ES_data)[1]
