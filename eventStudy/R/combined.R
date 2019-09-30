@@ -1970,6 +1970,3 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
 
   return(figdata)
 }
-
-
-
