@@ -347,7 +347,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
         # Define the time-invariant outcome for all units within a ref_onset_time
         # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
 
       } else{
 
@@ -363,7 +363,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
         # Define the time-invariant outcome for all units within a ref_onset_time
         # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
 
       }
 
@@ -396,9 +396,9 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
         if(class(ES_data[[var]]) == "integer"){
           # needed to include type checks as sum() often converts from integer to numeric
           # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+          ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
         } else{
-          ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
         }
       } else{
 
@@ -406,9 +406,9 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
         if(class(ES_data[[var]]) == "integer"){
           # needed to include type checks as sum() often converts from integer to numeric
           # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+          ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
         } else{
-          ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
         }
 
       }
@@ -438,7 +438,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       # needed to include type checks as sum() often converts from integer to numeric
       # use sum() instead of max() just to parallel earlier code; wouldn't anticipate negative values in a weight variable
     }
-    ES_data[, (ref_reg_weights) := unique(get(ref_reg_weights)[ref_event_time==ref_reg_weights_event_time],na.rm=T)[1], by=c(unit_var, "ref_onset_time")]
+    ES_data[, (ref_reg_weights) := unique(get(ref_reg_weights)[ref_event_time==ref_reg_weights_event_time], na.rm = TRUE)[1], by=c(unit_var, "ref_onset_time")]
 
 
     # remove any cases with ref_reg_weights <= 0, -Inf, Inf, or NA
@@ -1587,7 +1587,7 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
 
         # Define the time-invariant outcome for all units within a ref_onset_time
         # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
 
       } else{
 
@@ -1603,7 +1603,7 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
 
         # Define the time-invariant outcome for all units within a ref_onset_time
         # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
 
       }
 
@@ -1636,9 +1636,9 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
         if(class(bs_ES_data[[var]]) == "integer"){
           # needed to include type checks as sum() often converts from integer to numeric
           # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          bs_ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+          bs_ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
         } else{
-          bs_ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          bs_ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
         }
       } else{
 
@@ -1646,9 +1646,9 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
         if(class(bs_ES_data[[var]]) == "integer"){
           # needed to include type checks as sum() often converts from integer to numeric
           # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          bs_ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+          bs_ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
         } else{
-          bs_ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          bs_ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
         }
 
       }
@@ -1676,9 +1676,9 @@ bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, on
     if(class(bs_ES_data[[ref_reg_weights]]) == "integer"){
       # needed to include type checks as sum() often converts from integer to numeric
       # use sum() instead of max() just to parallel earlier code; wouldn't anticipate negative values in a weight variable
-      bs_ES_data[, (ref_reg_weights) := sum(as.integer(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time))), by=c(unit_var, "ref_onset_time")]
+      bs_ES_data[, (ref_reg_weights) := sum(as.integer(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time)), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
     } else{
-      bs_ES_data[, (ref_reg_weights) := sum(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time)), by=c(unit_var, "ref_onset_time")]
+      bs_ES_data[, (ref_reg_weights) := sum(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time), na.rm = TRUE), by=c(unit_var, "ref_onset_time")]
     }
 
     # remove any cases with ref_reg_weights <= 0, -Inf, Inf, or NA
