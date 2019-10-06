@@ -1,5 +1,5 @@
 #' @export
-ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
+by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
                linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
                control_subset_var=NA, control_subset_event_time=0,

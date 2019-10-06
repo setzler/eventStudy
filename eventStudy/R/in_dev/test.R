@@ -41,7 +41,9 @@ res0a <- ES(
   control_subset_var = "keep_case",
   control_subset_event_time = 0,
   calculate_collapse_estimates = TRUE,
-  collapse_inputs = copy(collapse_table))
+  collapse_inputs = copy(collapse_table),
+  linearDiD = TRUE,
+  linearDiD_treat_var = "gross_winnings_adj_equiv")
 
 res0b <- by_cohort_ES(
   long_data = copy(my_dt),
@@ -57,7 +59,11 @@ res0b <- by_cohort_ES(
   control_subset_var = "keep_case",
   control_subset_event_time = 0,
   calculate_collapse_estimates = TRUE,
-  collapse_inputs = copy(collapse_table), cohor)
+  collapse_inputs = copy(collapse_table),
+  cohort_by_cohort = TRUE,
+  cohort_by_cohort_num_cores = 1,
+  linearDiD = TRUE,
+  linearDiD_treat_var = "gross_winnings_adj_equiv")
 rm(collapse_table)
 
 # ###
