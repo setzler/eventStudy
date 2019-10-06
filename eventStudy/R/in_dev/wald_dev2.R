@@ -1,5 +1,5 @@
 #' @export
-Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
+Wald_ES2 <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
                linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
                control_subset_var=NA, control_subset_event_time=0,
@@ -17,7 +17,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
                ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
                endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
 
-  flog.info("Beginning Wald_ES.")
+  flog.info("Beginning Wald_ES2.")
 
   # type checks
   assertDataTable(long_data)
@@ -62,7 +62,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
   assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
   assertFlag(residualize_covariates)
-  if(residualize_covariates){
+  if(residualize_covariates == TRUE){
     if(!any(testCharacter(discrete_covars), testCharacter(cont_covars))){
       stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
     }
@@ -77,6 +77,11 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
   assertFlag(ipw_composition_change)
   assertNumber(ipw_ps_lower_bound,lower=0,upper=1)
   assertNumber(ipw_ps_upper_bound,lower=0,upper=1)
+  if(ipw == TRUE){
+    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars), testCharacter(ref_discrete_covars), testCharacter(ref_cont_covars))){
+      stop("Since ipw=TRUE, either discrete_covars, cont_covars, ref_discrete_covars, or ref_cont_covars must be provided as a character vector.")
+    }
+  }
   assertFlag(calculate_collapse_estimates)
   if(calculate_collapse_estimates == TRUE){
     assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
@@ -198,7 +203,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
   # check that user only supplied one of reg_weights / ref_reg_weights, but not both
   if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
-    stop("Supplied variables for both reg_weights and ref_reg_weights, but Wald_ES() only admits using one or the other type of weight (or neither).")
+    stop("Supplied variables for both reg_weights and ref_reg_weights, but Wald_ES2() only admits using one or the other type of weight (or neither).")
   }
 
   # check that user correctly input what to do with never treated
@@ -213,7 +218,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
   }
 
   # warning if cluster_vars = NULL
-  if(is.null(cluster_vars)){warning(sprintf("Supplied cluster_vars = NULL; given stacking in Wald_ES(), standard errors may be too small. Consider cluster_vars='%s' instead.", unit_var))}
+  if(is.null(cluster_vars)){warning(sprintf("Supplied cluster_vars = NULL; given stacking in Wald_ES2(), standard errors may be too small. Consider cluster_vars='%s' instead.", unit_var))}
 
   # warning if supplied bootstrap_num_cores*cohort_by_cohort_num_cores exceeds detectCores() - 1
   # not a perfect test (even as an upper bound) as results of detectCores() may be OS-dependent, may not respect cluster allocation limits, etc.
@@ -242,10 +247,9 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
     stop(sprintf("ipw_ps_lower_bound='%s' & ipw_ps_upper_bound='%s', which means ipw_ps_lower_bound > ipw_ps_upper_bound. Consider revising these cutoffs.", ipw_ps_lower_bound, ipw_ps_upper_bound))
   }
 
-  # if user will be producing bootstrap SEs, want to preserve a copy of the data as it is now;
-  # otherwise, potential for changes to underlying sample in subsequent steps
+  # if user will be producing bootstrap SEs, want to preserve a copy of the data as it is now
   if(bootstrapES == TRUE){
-    original_sample <- copy(long_data)
+    long_data_for_bootstrap <- copy(long_data)
   }
 
   # edit long_data in line with supplied never_treat_action option
@@ -293,14 +297,16 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
     count_dropped <- (count_long_data_initial-dim(long_data)[1])
     rm(count_long_data_initial)
 
-    flog.info((sprintf("\n Warning: Droppped %s from long_data due to missing or extreme reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA reg_weights \n 2) %s%% had Inf/-Inf reg_weights \n 3) %s%% had reg_weights <= 0",
-                       format(count_dropped, scientific = FALSE, big.mark = ","),
-                       round(((count_reg_weights_isna / count_dropped) * 100), digits = 4),
-                       round(((count_reg_weights_isinf / count_dropped) * 100), digits = 4),
-                       round(((count_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
-    )
-    )
-    )
+    if(count_dropped != 0){
+      flog.info((sprintf("\n Warning: Droppped %s from long_data due to missing or extreme reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA reg_weights \n 2) %s%% had Inf/-Inf reg_weights \n 3) %s%% had reg_weights <= 0",
+                         format(count_dropped, scientific = FALSE, big.mark = ","),
+                         round(((count_reg_weights_isna / count_dropped) * 100), digits = 4),
+                         round(((count_reg_weights_isinf / count_dropped) * 100), digits = 4),
+                         round(((count_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
+      )
+      )
+      )
+    }
     rm(count_reg_weights_isna, count_reg_weights_isinf, count_reg_weights_nonpositive, count_dropped)
     gc()
 
@@ -314,7 +320,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
   # extrapolate contribution of covariates using pre-treated period
   # NOTE: this will alter supplied long_data
-  if(residualize_covariates){
+  if(residualize_covariates == TRUE){
     flog.info("NOT CURRENTLY Residualizing on covariates.")
   }
 
@@ -350,7 +356,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
         # For a variable that is a character, will need to generate a numeric
         # Note: if there are missings, this will assign them all to a single level
         if(class(ES_data[[var]]) == "character"){
-          ES_data[, (varname) := .GRP, by = var]
+          ES_data[, (varname) := .GRP, keyby = var]
         } else{
           ES_data[, (varname) := get(var)]
         }
@@ -365,7 +371,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
         # For a variable that is a character, will need to generate a numeric
         if(class(ES_data[[var]]) == "character"){
-          ES_data[, varnum := .GRP, by = var]
+          ES_data[, varnum := .GRP, keyby = var]
           ES_data[, (varname) := NULL]
           setnames(ES_data, "varnum", varname)
           # ^need to do it this way because (varname) is character and redefining and assigning in one step is a pain
@@ -463,23 +469,38 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
     count_dropped <- (count_ES_initial-dim(ES_data)[1])
     rm(count_ES_initial)
 
-    flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme ref_reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA ref_reg_weights \n 2) %s%% had Inf/-Inf ref_reg_weights \n 3) %s%% had ref_reg_weights <= 0",
-                       format(count_dropped, scientific = FALSE, big.mark = ","),
-                       round(((count_ref_reg_weights_isna / count_dropped) * 100), digits = 4),
-                       round(((count_ref_reg_weights_isinf / count_dropped) * 100), digits = 4),
-                       round(((count_ref_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
-    )
-    )
-    )
+    if(count_dropped != 0){
+      flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme ref_reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA ref_reg_weights \n 2) %s%% had Inf/-Inf ref_reg_weights \n 3) %s%% had ref_reg_weights <= 0",
+                         format(count_dropped, scientific = FALSE, big.mark = ","),
+                         round(((count_ref_reg_weights_isna / count_dropped) * 100), digits = 4),
+                         round(((count_ref_reg_weights_isinf / count_dropped) * 100), digits = 4),
+                         round(((count_ref_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
+      )
+      )
+      )
+    }
     rm(count_ref_reg_weights_isna, count_ref_reg_weights_isinf, count_ref_reg_weights_nonpositive, count_dropped)
     gc()
+  }
+
+  if(bootstrapES == TRUE & linearize_pretrends == FALSE & residualize_covariates == FALSE){
+    # can shortcut the bootstrap code by using the stacked data
+    # and resampling ids and multiplicities (how many times the same id is drawn) from 'long_data_for_bootstrap'
+    # and then merging + filling stacked data
+
+    # NOTE:
+    # if estimating with ntile_var, the marginal distribution used for the ntiles won't exactly match what you'd get
+    # if you bootstrapped the sample before stacking
+    ES_data_for_bootstrap <- copy(ES_data)
+  } else{
+    ES_data_for_bootstrap <- NA
   }
 
   # estimate inverse probability weights, if relevant
   if(ipw == TRUE){
 
     # Within each DiD sample, estimate weights to balance provided covariates
-    ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
+    ES_data[, did_id := .GRP, keyby = list(ref_onset_time, catt_specific_sample)]
     did_ids <- ES_data[, sort(unique(did_id))]
 
     if(ipw_composition_change == FALSE){
@@ -488,7 +509,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
       for(i in did_ids){
 
-        ipw_dt <- ES_make_ipw_dt(did_dt = copy(ES_data[did_id == i]),
+        ipw_dt <- ES_make_ipw_dt2(did_dt = copy(ES_data[did_id == i]),
                                  unit_var = unit_var,
                                  cal_time_var = cal_time_var,
                                  discrete_covars = discrete_covars,
@@ -526,18 +547,19 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
       count_dropped <- (count_ES_initial-dim(ES_data)[1])
       rm(count_ES_initial)
 
-      flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
-                         format(count_dropped, scientific = FALSE, big.mark = ","),
-                         round(((count_pr_isna / count_dropped) * 100), digits = 4),
-                         round(((count_pr_isinf / count_dropped) * 100), digits = 4),
-                         round(((count_pr_extremelow / count_dropped) * 100), digits = 4),
-                         ipw_ps_lower_bound,
-                         round(((count_pr_extremehigh / count_dropped) * 100), digits = 4),
-                         ipw_ps_upper_bound
-      )
-      )
-      )
-
+      if(count_dropped !=0){
+        flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
+                           format(count_dropped, scientific = FALSE, big.mark = ","),
+                           round(((count_pr_isna / count_dropped) * 100), digits = 4),
+                           round(((count_pr_isinf / count_dropped) * 100), digits = 4),
+                           round(((count_pr_extremelow / count_dropped) * 100), digits = 4),
+                           ipw_ps_lower_bound,
+                           round(((count_pr_extremehigh / count_dropped) * 100), digits = 4),
+                           ipw_ps_upper_bound
+        )
+        )
+        )
+      }
       rm(count_pr_isna, count_pr_isinf, count_pr_extremelow, count_pr_extremehigh, count_dropped)
 
       ES_data[treated == 1, pw := 1]
@@ -1157,20 +1179,17 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
     treat_means_fs[, model := "first_stage"]
   }
 
-  ###
-  # TO-DO: two-sample IV / delta-method SES
-  ###
-
   # start bootstrap run if relevant
   if(bootstrapES == TRUE){
 
-    # all arguments of Wald_bootstrap_ES are passed but for 'iter', which will be supplied by 1:bootstrap_iters below
+    # all arguments of Wald_bootstrap_ES2 are passed but for 'iter', which will be supplied by 1:bootstrap_iters below
     boot_results <- rbindlist(parallel::mclapply(X = 1:bootstrap_iters,
-                                                 FUN = Wald_bootstrap_ES,
+                                                 FUN = Wald_bootstrap_ES2,
                                                  mc.silent = FALSE,
                                                  mc.cores = bootstrap_num_cores,
                                                  mc.set.seed = TRUE,
-                                                 long_data = original_sample, outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var, cluster_vars = cluster_vars,
+                                                 long_data = long_data_for_bootstrap, stacked_data = ES_data_for_bootstrap,
+                                                 outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var, cluster_vars = cluster_vars,
                                                  omitted_event_time= omitted_event_time, anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap,
                                                  linearize_pretrends = linearize_pretrends, fill_zeros = fill_zeros, residualize_covariates = residualize_covariates,
                                                  control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
@@ -1188,6 +1207,10 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
                                                  endog_var = endog_var, cohort_by_cohort = cohort_by_cohort, cohort_by_cohort_num_cores = cohort_by_cohort_num_cores),
                               use.names = TRUE
     )
+
+    ES_data_for_bootstrap <- NULL
+    long_data_for_bootstrap <- NULL
+    gc()
 
     if(keep_all_bootstrap_results == TRUE){
       bootstrap_output <- copy(boot_results)
@@ -1218,9 +1241,6 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
       figdata[, bootstrap_se_collapse := NULL]
     }
 
-    original_sample <- NULL
-    gc()
-
   }
 
   if(ipw_keep_data == TRUE){
@@ -1249,15 +1269,15 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
     return_list[[7]] <- bootstrap_output
   }
 
-  flog.info('Wald_ES is finished.')
+  flog.info('Wald_ES2 is finished.')
 
   return(return_list)
 
 }
 
 #' @export
-# Need 'iter' to come first given how R reads the lapply/mclapply implementing Wald_bootstrap_ES()
-Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
+# Need 'iter' to come first given how R reads the lapply/mclapply implementing Wald_bootstrap_ES2()
+Wald_bootstrap_ES2 <- function(iter, long_data, stacked_data = NA, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
                               omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
                               linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
                               control_subset_var=NA, control_subset_event_time=0,
@@ -1274,13 +1294,13 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
                               ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
                               endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
 
-  # Function mirrors Wald_ES(), but with less printing/warning and skipping sections responsible for analytical standard errors and the like which aren't relevant
+  # Function mirrors Wald_ES2(), but with less printing/warning and skipping sections responsible for analytical standard errors and the like which aren't relevant
   # We keep various checks to make sure no issues arise due to a potential strange bootstrap sample draw
 
   bs_long_data <- block_sample(long_data = copy(long_data), unit_var = unit_var, cal_time_var = cal_time_var)
   gc()
 
-  flog.info(sprintf("Beginning Wald_bootstrap_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+  flog.info(sprintf("Beginning Wald_bootstrap_ES2 iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
 
   # type checks
   assertDataTable(bs_long_data)
@@ -1325,7 +1345,7 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
   assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
   assertFlag(residualize_covariates)
-  if(residualize_covariates){
+  if(residualize_covariates == TRUE){
     if(!any(testCharacter(discrete_covars), testCharacter(cont_covars))){
       stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
     }
@@ -1336,6 +1356,11 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
   assertFlag(ipw_composition_change)
   assertNumber(ipw_ps_lower_bound,lower=0,upper=1)
   assertNumber(ipw_ps_upper_bound,lower=0,upper=1)
+  if(ipw == TRUE){
+    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars), testCharacter(ref_discrete_covars), testCharacter(ref_cont_covars))){
+      stop("Since ipw=TRUE, either discrete_covars, cont_covars, ref_discrete_covars, or ref_cont_covars must be provided as a character vector.")
+    }
+  }
   assertFlag(calculate_collapse_estimates)
   if(calculate_collapse_estimates == TRUE){
     assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
@@ -1457,7 +1482,7 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
 
   # check that user only supplied one of reg_weights / ref_reg_weights, but not both
   if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
-    stop("Supplied variables for both reg_weights and ref_reg_weights, but Wald_bootstrap_ES() only admits using one or the other type of weight (or neither).")
+    stop("Supplied variables for both reg_weights and ref_reg_weights, but Wald_bootstrap_ES2() only admits using one or the other type of weight (or neither).")
   }
 
   # check that user correctly input what to do with never treated
@@ -1496,7 +1521,7 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
 
   # fill with zeros
   if(fill_zeros){
-    flog.info(sprintf("Filling in zeros in Wald_bootstrap_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+    flog.info(sprintf("Filling in zeros in Wald_bootstrap_ES2 iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
     bs_long_data <- ES_expand_to_balance(long_data = bs_long_data,
                                          vars_to_fill = na.omit(unique(c(outcomevar, endog_var))),
                                          unit_var = unit_var,
@@ -1515,161 +1540,200 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
     gc()
   }
 
-  # linearize pre-trends; never-treated will be treated as a single cohort
-  if(linearize_pretrends){
-    # Not straightforward what to do in the case where !is.null(endog_var)
-    flog.info("NOT CURRENTLY Linearizing pre-trends.")
-  }
+  if(linearize_pretrends == FALSE & residualize_covariates == FALSE){
 
-  # extrapolate contribution of covariates using pre-treated period
-  if(residualize_covariates){
-    # Not straightforward what to do in the case where !is.null(endog_var)
-    flog.info("NOT CURRENTLY Residualizing on covariates.")
-  }
+    # version where we avoid re-stacking the data each time
 
-  # process data
-  flog.info(sprintf("Beginning data stacking in Wald_bootstrap_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
-  bs_ES_data <- ES_clean_data(long_data = bs_long_data, outcomevar = outcomevar,
-                              unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
-                              anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
-                              control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
-                              treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
-                              control_subset_var2 = control_subset_var2, control_subset_event_time2 = control_subset_event_time2,
-                              treated_subset_var2 = treated_subset_var2, treated_subset_event_time2 = treated_subset_event_time2,
-                              never_treat_action = never_treat_action, never_treat_val = never_treat_val,
-                              cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights, event_vs_noevent = event_vs_noevent,
-                              ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars, ref_reg_weights = ref_reg_weights,
-                              ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
-                              endog_var = endog_var)
-
-  # construct discrete covariates specific to a ref_event_time
-  # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
-
-  if(!is.null(ref_discrete_covars)){
-
-    start_cols <- copy(colnames(bs_ES_data))
-
-    for(var in ref_discrete_covars){
-
-      # If, for some reason, there is overlap (in variable name) between discrete_covars and ref_discrete_covars, want to make sure not to overwrite
-      if(var %in% discrete_covars){
-
-        varname <- sprintf("%s_dyn", var)
-
-        # For a variable that is a character, will need to generate a numeric
-        # Note: if there are missings, this will assign them all to a single level
-        if(class(bs_ES_data[[var]]) == "character"){
-          bs_ES_data[, (varname) := .GRP, by = var]
-        } else{
-          bs_ES_data[, (varname) := get(var)]
-        }
-
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
-
-      } else{
-
-        varname <- var
-
-        # For a variable that is a character, will need to generate a numeric
-        if(class(bs_ES_data[[var]]) == "character"){
-          bs_ES_data[, varnum := .GRP, by = var]
-          bs_ES_data[, (varname) := NULL]
-          setnames(bs_ES_data, "varnum", varname)
-          # ^need to do it this way because (varname) is character and redefining and assigning in one step is a pain
-        }
-
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
-
-      }
-
-    }
-
-    # If any columns were generated above, we can add them to ref_discrete_covars
-    # When these are used later in estimation, the loop is over unique values in the intersection of discrete_covars and ref_discrete_covars
-    ref_discrete_covars <- unique(na.omit(c(ref_discrete_covars, setdiff(colnames(bs_ES_data), start_cols))))
-    rm(start_cols)
-  }
-
-  # construct continuous covariates specific to a ref_event_time
-  # will be time invariant for a given ref_onset_time, but time-varying across ref_onset_times
-
-  if(!is.null(ref_cont_covars)){
-
-    # Will construct this control variable which will be time-invariant, but defined as of the ref_cont_covar_event_time relative to each ref_onset_time
-    # Shouldn't have any missings, but in the code, will just treat this as another category
-
-    start_cols <- copy(colnames(bs_ES_data))
-
-    for(var in ref_cont_covars){
-
-      # If, for some reason, there is overlap (in variable name) between cont_covars and ref_cont_covars, want to make sure not to overwrite
-      if(var %in% cont_covars){
-
-        varname <- sprintf("%s_dyn", var)
-
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        if(class(bs_ES_data[[var]]) == "integer"){
-          # needed to include type checks as sum() often converts from integer to numeric
-          # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          bs_ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
-        } else{
-          bs_ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
-        }
-      } else{
-
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        if(class(bs_ES_data[[var]]) == "integer"){
-          # needed to include type checks as sum() often converts from integer to numeric
-          # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          bs_ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
-        } else{
-          bs_ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
-        }
-
-      }
-
-    }
-
-    # If any columns were generated above, we can add them to ref_cont_covars
-    # When these are used later in estimation, the loop is over unique values in the intersection of cont_covars and ref_cont_covars
-    ref_cont_covars <- unique(na.omit(c(ref_cont_covars, setdiff(colnames(bs_ES_data), start_cols))))
-    rm(start_cols)
-  }
-
-  # construct regression weights specific to a ref_event_time
-  # will be time invariant for a given ref_onset_time, but time-varying across ref_onset_times
-
-  if(!is.null(ref_reg_weights)){
-
-    # Will construct this weight variable which will be time-invariant, but defined as of the ref_reg_weights_event_time relative to each ref_onset_time
-    # Shouldn't have any missings, but in the code, will just treat this as another category
-
-    # Unlike other two types of ref_* vars, no need to check for variable name overlap here with reg_weights
-    # as we don't allow using both reg_weight and ref_reg_weights
-
-    # Define the time-invariant outcome for all units within a ref_onset_time
-    if(class(bs_ES_data[[ref_reg_weights]]) == "integer"){
-      # needed to include type checks as sum() often converts from integer to numeric
-      # use sum() instead of max() just to parallel earlier code; wouldn't anticipate negative values in a weight variable
-      bs_ES_data[, (ref_reg_weights) := sum(as.integer(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time))), by=c(unit_var, "ref_onset_time")]
-    } else{
-      bs_ES_data[, (ref_reg_weights) := sum(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time)), by=c(unit_var, "ref_onset_time")]
-    }
-
-    # remove any cases with ref_reg_weights <= 0, -Inf, Inf, or NA
-    bs_ES_data <- bs_ES_data[(!is.na(get(ref_reg_weights))) & (!is.infinite(get(ref_reg_weights))) & (get(ref_reg_weights) > 0)]
+    # extract IDs and multiplicity from bs_long_data
+    bs_sample_frame <- data.table(char_id = bs_long_data[, unique(get(unit_var))])
+    bs_sample_frame[, c(unit_var, "multiplicity") := tstrsplit(char_id, "-", fixed = TRUE)]
+    # ^ special character hard-coded based on action of block_sample(), which concatenates 'unit_var' with it's multiplicity, with "-" in between
+    bs_sample_frame[, (unit_var) := as.integer(get(unit_var))]
+    bs_sample_frame <- bs_sample_frame[, list(multiplicity = max(as.integer(multiplicity))), by = unit_var]
     gc()
+
+    bs_ES_data <- merge(stacked_data, bs_sample_frame, by = unit_var, sort = FALSE)
+    bs_sample_frame <- NULL
+    gc()
+
+    # expand ES_data in line with the 'multiplicity' column and remove 'multiplicity' column
+    bs_ES_data <- bs_ES_data[rep(seq(.N), multiplicity), !"multiplicity"]
+
+    # to treat individual FEs consistently, will reform the character-type 'unit_var' to treat multiple draws of the same unit as distinct
+    # do it this way so as not to rely on any assumptions about recycling observations in the merge step earlier
+    bs_ES_data[, draw_count := seq_len(.N), by = c(unit_var, cal_time_var, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated")]
+    bs_ES_data[, (unit_var) := paste0(get(unit_var), "-", as.character(draw_count))]
+    bs_ES_data[, draw_count := NULL]
+    gc()
+
+    flog.info(sprintf("Successfully produced a stacked dataset with %s rows.",
+                      format(dim(bs_ES_data)[1], scientific = FALSE, big.mark = ","))
+    )
+
+  } else{
+
+    # bootstrap and also re-stacking the data each time
+
+    # linearize pre-trends; never-treated will be treated as a single cohort
+    if(linearize_pretrends){
+      # Not straightforward what to do in the case where !is.null(endog_var)
+      flog.info("NOT CURRENTLY Linearizing pre-trends.")
+    }
+
+    # extrapolate contribution of covariates using pre-treated period
+    if(residualize_covariates == TRUE){
+      # Not straightforward what to do in the case where !is.null(endog_var)
+      flog.info("NOT CURRENTLY Residualizing on covariates.")
+    }
+
+    # process data
+    flog.info(sprintf("Beginning data stacking in Wald_bootstrap_ES2 iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+    bs_ES_data <- ES_clean_data(long_data = bs_long_data, outcomevar = outcomevar,
+                                unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
+                                anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
+                                control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
+                                treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
+                                control_subset_var2 = control_subset_var2, control_subset_event_time2 = control_subset_event_time2,
+                                treated_subset_var2 = treated_subset_var2, treated_subset_event_time2 = treated_subset_event_time2,
+                                never_treat_action = never_treat_action, never_treat_val = never_treat_val,
+                                cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights, event_vs_noevent = event_vs_noevent,
+                                ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars, ref_reg_weights = ref_reg_weights,
+                                ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
+                                endog_var = endog_var)
+
+    # construct discrete covariates specific to a ref_event_time
+    # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
+
+    if(!is.null(ref_discrete_covars)){
+
+      start_cols <- copy(colnames(bs_ES_data))
+
+      for(var in ref_discrete_covars){
+
+        # If, for some reason, there is overlap (in variable name) between discrete_covars and ref_discrete_covars, want to make sure not to overwrite
+        if(var %in% discrete_covars){
+
+          varname <- sprintf("%s_dyn", var)
+
+          # For a variable that is a character, will need to generate a numeric
+          # Note: if there are missings, this will assign them all to a single level
+          if(class(bs_ES_data[[var]]) == "character"){
+            bs_ES_data[, (varname) := .GRP, keyby = var]
+          } else{
+            bs_ES_data[, (varname) := get(var)]
+          }
+
+          # Define the time-invariant outcome for all units within a ref_onset_time
+          # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
+          bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+
+        } else{
+
+          varname <- var
+
+          # For a variable that is a character, will need to generate a numeric
+          if(class(bs_ES_data[[var]]) == "character"){
+            bs_ES_data[, varnum := .GRP, keyby = var]
+            bs_ES_data[, (varname) := NULL]
+            setnames(bs_ES_data, "varnum", varname)
+            # ^need to do it this way because (varname) is character and redefining and assigning in one step is a pain
+          }
+
+          # Define the time-invariant outcome for all units within a ref_onset_time
+          # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
+          bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+
+        }
+
+      }
+
+      # If any columns were generated above, we can add them to ref_discrete_covars
+      # When these are used later in estimation, the loop is over unique values in the intersection of discrete_covars and ref_discrete_covars
+      ref_discrete_covars <- unique(na.omit(c(ref_discrete_covars, setdiff(colnames(bs_ES_data), start_cols))))
+      rm(start_cols)
+    }
+
+    # construct continuous covariates specific to a ref_event_time
+    # will be time invariant for a given ref_onset_time, but time-varying across ref_onset_times
+
+    if(!is.null(ref_cont_covars)){
+
+      # Will construct this control variable which will be time-invariant, but defined as of the ref_cont_covar_event_time relative to each ref_onset_time
+      # Shouldn't have any missings, but in the code, will just treat this as another category
+
+      start_cols <- copy(colnames(bs_ES_data))
+
+      for(var in ref_cont_covars){
+
+        # If, for some reason, there is overlap (in variable name) between cont_covars and ref_cont_covars, want to make sure not to overwrite
+        if(var %in% cont_covars){
+
+          varname <- sprintf("%s_dyn", var)
+
+          # Define the time-invariant outcome for all units within a ref_onset_time
+          if(class(bs_ES_data[[var]]) == "integer"){
+            # needed to include type checks as sum() often converts from integer to numeric
+            # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
+            bs_ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+          } else{
+            bs_ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          }
+        } else{
+
+          # Define the time-invariant outcome for all units within a ref_onset_time
+          if(class(bs_ES_data[[var]]) == "integer"){
+            # needed to include type checks as sum() often converts from integer to numeric
+            # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
+            bs_ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+          } else{
+            bs_ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          }
+
+        }
+
+      }
+
+      # If any columns were generated above, we can add them to ref_cont_covars
+      # When these are used later in estimation, the loop is over unique values in the intersection of cont_covars and ref_cont_covars
+      ref_cont_covars <- unique(na.omit(c(ref_cont_covars, setdiff(colnames(bs_ES_data), start_cols))))
+      rm(start_cols)
+    }
+
+    # construct regression weights specific to a ref_event_time
+    # will be time invariant for a given ref_onset_time, but time-varying across ref_onset_times
+
+    if(!is.null(ref_reg_weights)){
+
+      # Will construct this weight variable which will be time-invariant, but defined as of the ref_reg_weights_event_time relative to each ref_onset_time
+      # Shouldn't have any missings, but in the code, will just treat this as another category
+
+      # Unlike other two types of ref_* vars, no need to check for variable name overlap here with reg_weights
+      # as we don't allow using both reg_weight and ref_reg_weights
+
+      # Define the time-invariant outcome for all units within a ref_onset_time
+      if(class(bs_ES_data[[ref_reg_weights]]) == "integer"){
+        # needed to include type checks as sum() often converts from integer to numeric
+        # use sum() instead of max() just to parallel earlier code; wouldn't anticipate negative values in a weight variable
+        bs_ES_data[, (ref_reg_weights) := sum(as.integer(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time))), by=c(unit_var, "ref_onset_time")]
+      } else{
+        bs_ES_data[, (ref_reg_weights) := sum(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time)), by=c(unit_var, "ref_onset_time")]
+      }
+
+      # remove any cases with ref_reg_weights <= 0, -Inf, Inf, or NA
+      bs_ES_data <- bs_ES_data[(!is.na(get(ref_reg_weights))) & (!is.infinite(get(ref_reg_weights))) & (get(ref_reg_weights) > 0)]
+      gc()
+    }
+
   }
+
+  bs_long_data <- NULL
+  gc()
 
   # estimate inverse probability weights, if relevant
   if(ipw == TRUE){
 
     # Within each DiD sample, estimate weights to balance provided covariates
-    bs_ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
+    bs_ES_data[, did_id := .GRP, keyby = list(ref_onset_time, catt_specific_sample)]
     did_ids <- bs_ES_data[, sort(unique(did_id))]
 
     if(ipw_composition_change == FALSE){
@@ -1678,7 +1742,7 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
 
       for(i in did_ids){
 
-        ipw_dt <- ES_make_ipw_dt(did_dt = copy(bs_ES_data[did_id == i]),
+        ipw_dt <- ES_make_ipw_dt2(did_dt = copy(bs_ES_data[did_id == i]),
                                  unit_var = unit_var,
                                  cal_time_var = cal_time_var,
                                  discrete_covars = discrete_covars,
@@ -2074,7 +2138,7 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
   figdata[model == "rf", model := "reduced_form"]
   figdata[model == "fs", model := "first_stage"]
 
-  flog.info(sprintf("Wald_bootstrap_ES iteration %s is finished.", format(iter, scientific = FALSE, big.mark = ",")))
+  flog.info(sprintf("Wald_bootstrap_ES2 iteration %s is finished.", format(iter, scientific = FALSE, big.mark = ",")))
 
   return(figdata)
 }

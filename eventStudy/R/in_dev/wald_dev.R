@@ -1,23 +1,23 @@
 #' @export
-by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
-                         omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
-                         linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
-                         control_subset_var=NA, control_subset_event_time=0,
-                         treated_subset_var=NA, treated_subset_event_time=0,
-                         control_subset_var2=NA, control_subset_event_time2=0,
-                         treated_subset_var2=NA, treated_subset_event_time2=0,
-                         discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
-                         homogeneous_ATT = FALSE, reg_weights = NULL, add_unit_fes = FALSE,
-                         bootstrapES = FALSE, bootstrap_iters = 1, bootstrap_num_cores = 1, keep_all_bootstrap_results = FALSE,
-                         ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_keep_data = FALSE, ipw_ps_lower_bound = 0, ipw_ps_upper_bound = 1,
-                         event_vs_noevent = FALSE,
-                         ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
-                         calculate_collapse_estimates = FALSE, collapse_inputs = NULL,
-                         ref_reg_weights = NULL, ref_reg_weights_event_time=0,
-                         ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
-                         cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
+Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
+               omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
+               linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
+               control_subset_var=NA, control_subset_event_time=0,
+               treated_subset_var=NA, treated_subset_event_time=0,
+               control_subset_var2=NA, control_subset_event_time2=0,
+               treated_subset_var2=NA, treated_subset_event_time2=0,
+               discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
+               homogeneous_ATT = FALSE, reg_weights = NULL, add_unit_fes = FALSE,
+               bootstrapES = FALSE, bootstrap_iters = 1, bootstrap_num_cores = 1, keep_all_bootstrap_results = FALSE,
+               ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_keep_data = FALSE, ipw_ps_lower_bound = 0, ipw_ps_upper_bound = 1,
+               event_vs_noevent = FALSE,
+               ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
+               calculate_collapse_estimates = FALSE, collapse_inputs = NULL,
+               ref_reg_weights = NULL, ref_reg_weights_event_time=0,
+               ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
+               endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
 
-  flog.info("Beginning by_cohort_ES.")
+  flog.info("Beginning Wald_ES.")
 
   # type checks
   assertDataTable(long_data)
@@ -62,7 +62,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
   assertFlag(residualize_covariates)
-  if(residualize_covariates){
+  if(residualize_covariates == TRUE){
     if(!any(testCharacter(discrete_covars), testCharacter(cont_covars))){
       stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
     }
@@ -77,6 +77,11 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   assertFlag(ipw_composition_change)
   assertNumber(ipw_ps_lower_bound,lower=0,upper=1)
   assertNumber(ipw_ps_upper_bound,lower=0,upper=1)
+  if(ipw == TRUE){
+    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars), testCharacter(ref_discrete_covars), testCharacter(ref_cont_covars))){
+      stop("Since ipw=TRUE, either discrete_covars, cont_covars, ref_discrete_covars, or ref_cont_covars must be provided as a character vector.")
+    }
+  }
   assertFlag(calculate_collapse_estimates)
   if(calculate_collapse_estimates == TRUE){
     assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
@@ -86,6 +91,9 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     assertIntegerish(ntiles,len=1,lower=2)
     assertIntegerish(ntile_var_value,len=1,lower=1,upper=ntiles)
     assertFlag(ntile_avg)
+  }
+  if(!is.null(endog_var)){
+    assertCharacter(endog_var,len=1)
   }
   assertFlag(cohort_by_cohort)
   assertIntegerish(cohort_by_cohort_num_cores,len=1,lower=1)
@@ -151,6 +159,9 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   if(testCharacter(ntile_var)){
     if(!(ntile_var %in% names(long_data))){stop(sprintf("Variable ntile_var='%s' is not in the long_data you provided.",ntile_var))}
   }
+  if(testCharacter(endog_var)){
+    if(!(endog_var %in% names(long_data))){stop(sprintf("Variable endog_var='%s' is not in the long_data you provided.",endog_var))}
+  }
 
   # temporary check -- code is currently not set up to accept ntile_event_time != omitted_event_time
   # only bites in the case where !is.null(ntile_var) and omitted_event_time != ntile_event_time
@@ -192,7 +203,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
   # check that user only supplied one of reg_weights / ref_reg_weights, but not both
   if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
-    stop("Supplied variables for both reg_weights and ref_reg_weights, but by_cohort_ES() only admits using one or the other type of weight (or neither).")
+    stop("Supplied variables for both reg_weights and ref_reg_weights, but Wald_ES() only admits using one or the other type of weight (or neither).")
   }
 
   # check that user correctly input what to do with never treated
@@ -207,7 +218,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   }
 
   # warning if cluster_vars = NULL
-  if(is.null(cluster_vars)){warning(sprintf("Supplied cluster_vars = NULL; given stacking in by_cohort_ES(), standard errors may be too small. Consider cluster_vars='%s' instead.", unit_var))}
+  if(is.null(cluster_vars)){warning(sprintf("Supplied cluster_vars = NULL; given stacking in Wald_ES(), standard errors may be too small. Consider cluster_vars='%s' instead.", unit_var))}
 
   # warning if supplied bootstrap_num_cores*cohort_by_cohort_num_cores exceeds detectCores() - 1
   # not a perfect test (even as an upper bound) as results of detectCores() may be OS-dependent, may not respect cluster allocation limits, etc.
@@ -261,7 +272,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   if(fill_zeros){
     flog.info("Filling in zeros.")
     long_data <- ES_expand_to_balance(long_data = long_data,
-                                      vars_to_fill = outcomevar,
+                                      vars_to_fill = na.omit(unique(c(outcomevar, endog_var))),
                                       unit_var = unit_var,
                                       cal_time_var = cal_time_var,
                                       onset_time_var = onset_time_var)
@@ -287,14 +298,16 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     count_dropped <- (count_long_data_initial-dim(long_data)[1])
     rm(count_long_data_initial)
 
-    flog.info((sprintf("\n Warning: Droppped %s from long_data due to missing or extreme reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA reg_weights \n 2) %s%% had Inf/-Inf reg_weights \n 3) %s%% had reg_weights <= 0",
-                       format(count_dropped, scientific = FALSE, big.mark = ","),
-                       round(((count_reg_weights_isna / count_dropped) * 100), digits = 4),
-                       round(((count_reg_weights_isinf / count_dropped) * 100), digits = 4),
-                       round(((count_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
-    )
-    )
-    )
+    if(count_dropped != 0){
+      flog.info((sprintf("\n Warning: Droppped %s from long_data due to missing or extreme reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA reg_weights \n 2) %s%% had Inf/-Inf reg_weights \n 3) %s%% had reg_weights <= 0",
+                         format(count_dropped, scientific = FALSE, big.mark = ","),
+                         round(((count_reg_weights_isna / count_dropped) * 100), digits = 4),
+                         round(((count_reg_weights_isinf / count_dropped) * 100), digits = 4),
+                         round(((count_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
+      )
+      )
+      )
+    }
     rm(count_reg_weights_isna, count_reg_weights_isinf, count_reg_weights_nonpositive, count_dropped)
     gc()
 
@@ -303,20 +316,13 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   # linearize pre-trends; never-treated will be treated as a single cohort
   # NOTE: this will alter supplied long_data
   if(linearize_pretrends){
-    flog.info("Linearizing pre-trends.")
-    long_data <- ES_parallelize_trends(long_data = long_data, outcomevar = outcomevar,
-                                       unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
-                                       anticipation = anticipation, reg_weights = reg_weights)
+    flog.info("NOT CURRENTLY Linearizing pre-trends.")
   }
 
   # extrapolate contribution of covariates using pre-treated period
   # NOTE: this will alter supplied long_data
-  if(residualize_covariates){
-    flog.info("Residualizing on covariates.")
-    long_data <- ES_residualize_covariates(long_data = long_data, outcomevar = outcomevar,
-                                           unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
-                                           anticipation = anticipation, discrete_covars = discrete_covars, cont_covars = cont_covars,
-                                           reg_weights = reg_weights)
+  if(residualize_covariates == TRUE){
+    flog.info("NOT CURRENTLY Residualizing on covariates.")
   }
 
   # process data
@@ -331,7 +337,8 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                            never_treat_action = never_treat_action, never_treat_val = never_treat_val,
                            cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights, event_vs_noevent = event_vs_noevent,
                            ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars, ref_reg_weights = ref_reg_weights,
-                           ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg)
+                           ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
+                           endog_var = endog_var)
 
   # construct discrete covariates specific to a ref_event_time
   # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
@@ -350,7 +357,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
         # For a variable that is a character, will need to generate a numeric
         # Note: if there are missings, this will assign them all to a single level
         if(class(ES_data[[var]]) == "character"){
-          ES_data[, (varname) := .GRP, by = var]
+          ES_data[, (varname) := .GRP, keyby = var]
         } else{
           ES_data[, (varname) := get(var)]
         }
@@ -365,7 +372,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
         # For a variable that is a character, will need to generate a numeric
         if(class(ES_data[[var]]) == "character"){
-          ES_data[, varnum := .GRP, by = var]
+          ES_data[, varnum := .GRP, keyby = var]
           ES_data[, (varname) := NULL]
           setnames(ES_data, "varnum", varname)
           # ^need to do it this way because (varname) is character and redefining and assigning in one step is a pain
@@ -463,14 +470,16 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     count_dropped <- (count_ES_initial-dim(ES_data)[1])
     rm(count_ES_initial)
 
-    flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme ref_reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA ref_reg_weights \n 2) %s%% had Inf/-Inf ref_reg_weights \n 3) %s%% had ref_reg_weights <= 0",
-                       format(count_dropped, scientific = FALSE, big.mark = ","),
-                       round(((count_ref_reg_weights_isna / count_dropped) * 100), digits = 4),
-                       round(((count_ref_reg_weights_isinf / count_dropped) * 100), digits = 4),
-                       round(((count_ref_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
-    )
-    )
-    )
+    if(count_dropped != 0){
+      flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme ref_reg_weights. \n Of those dropped, the breakdown is: \n 1) %s%% had NA ref_reg_weights \n 2) %s%% had Inf/-Inf ref_reg_weights \n 3) %s%% had ref_reg_weights <= 0",
+                         format(count_dropped, scientific = FALSE, big.mark = ","),
+                         round(((count_ref_reg_weights_isna / count_dropped) * 100), digits = 4),
+                         round(((count_ref_reg_weights_isinf / count_dropped) * 100), digits = 4),
+                         round(((count_ref_reg_weights_nonpositive / count_dropped) * 100), digits = 4)
+      )
+      )
+      )
+    }
     rm(count_ref_reg_weights_isna, count_ref_reg_weights_isinf, count_ref_reg_weights_nonpositive, count_dropped)
     gc()
   }
@@ -479,7 +488,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   if(ipw == TRUE){
 
     # Within each DiD sample, estimate weights to balance provided covariates
-    ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
+    ES_data[, did_id := .GRP, keyby = list(ref_onset_time, catt_specific_sample)]
     did_ids <- ES_data[, sort(unique(did_id))]
 
     if(ipw_composition_change == FALSE){
@@ -488,7 +497,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
       for(i in did_ids){
 
-        ipw_dt <- ES_make_ipw_dt(did_dt = copy(ES_data[did_id == i]),
+        ipw_dt <- ES_make_ipw_dt2(did_dt = copy(ES_data[did_id == i]),
                                  unit_var = unit_var,
                                  cal_time_var = cal_time_var,
                                  discrete_covars = discrete_covars,
@@ -526,18 +535,19 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
       count_dropped <- (count_ES_initial-dim(ES_data)[1])
       rm(count_ES_initial)
 
-      flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
-                         format(count_dropped, scientific = FALSE, big.mark = ","),
-                         round(((count_pr_isna / count_dropped) * 100), digits = 4),
-                         round(((count_pr_isinf / count_dropped) * 100), digits = 4),
-                         round(((count_pr_extremelow / count_dropped) * 100), digits = 4),
-                         ipw_ps_lower_bound,
-                         round(((count_pr_extremehigh / count_dropped) * 100), digits = 4),
-                         ipw_ps_upper_bound
-      )
-      )
-      )
-
+      if(count_dropped != 0){
+        flog.info((sprintf("\n Warning: Droppped %s from stacked data due to missing or extreme estimated propensity scores. \n Of those dropped, the breakdown is: \n 1) %s%% had a NA propensity score \n 2) %s%% had a Inf/-Inf propensity score \n 3) %s%% had a propensity score <= %s \n 4) %s%% had a propensity score >= %s",
+                           format(count_dropped, scientific = FALSE, big.mark = ","),
+                           round(((count_pr_isna / count_dropped) * 100), digits = 4),
+                           round(((count_pr_isinf / count_dropped) * 100), digits = 4),
+                           round(((count_pr_extremelow / count_dropped) * 100), digits = 4),
+                           ipw_ps_lower_bound,
+                           round(((count_pr_extremehigh / count_dropped) * 100), digits = 4),
+                           ipw_ps_upper_bound
+        )
+        )
+        )
+      }
       rm(count_pr_isna, count_pr_isinf, count_pr_extremelow, count_pr_extremehigh, count_dropped)
 
       ES_data[treated == 1, pw := 1]
@@ -552,79 +562,171 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
-    ES_results_hetero <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
-                                                   outcomevar=outcomevar,
-                                                   unit_var = unit_var,
-                                                   onset_time_var = onset_time_var,
-                                                   cluster_vars = cluster_vars,
-                                                   homogeneous_ATT = homogeneous_ATT,
-                                                   omitted_event_time = omitted_event_time,
-                                                   discrete_covars = discrete_covars,
-                                                   cont_covars = cont_covars,
-                                                   ref_discrete_covars = ref_discrete_covars,
-                                                   ref_cont_covars = ref_cont_covars,
-                                                   residualize_covariates = residualize_covariates,
-                                                   reg_weights = reg_weights,
-                                                   ref_reg_weights = ref_reg_weights,
-                                                   ipw = ipw,
-                                                   ipw_composition_change = ipw_composition_change,
-                                                   add_unit_fes = add_unit_fes,
-                                                   cohort_by_cohort = cohort_by_cohort,
-                                                   cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)
 
+    # reduced form; homogeneous_ATT = FALSE
+    # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+    ES_results_hetero_rf <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
+                                                      outcomevar = outcomevar,
+                                                      unit_var = unit_var,
+                                                      onset_time_var = onset_time_var,
+                                                      cluster_vars = cluster_vars,
+                                                      homogeneous_ATT = homogeneous_ATT,
+                                                      omitted_event_time = omitted_event_time,
+                                                      discrete_covars = discrete_covars,
+                                                      cont_covars = cont_covars,
+                                                      ref_discrete_covars = ref_discrete_covars,
+                                                      ref_cont_covars = ref_cont_covars,
+                                                      residualize_covariates = residualize_covariates,
+                                                      reg_weights = reg_weights,
+                                                      ref_reg_weights = ref_reg_weights,
+                                                      ipw = ipw,
+                                                      ipw_composition_change = ipw_composition_change,
+                                                      add_unit_fes = add_unit_fes,
+                                                      cohort_by_cohort = cohort_by_cohort,
+                                                      cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)
     gc()
 
-    catt_coefs <- ES_results_hetero[[2]]
-    catt_vcov <- ES_results_hetero[[3]]
+    catt_coefs_rf <- ES_results_hetero_rf[[2]]
+    catt_vcov_rf <- ES_results_hetero_rf[[3]]
 
-    ES_results_hetero <- ES_results_hetero[[1]]
+    ES_results_hetero_rf <- ES_results_hetero_rf[[1]]
     gc()
 
-    setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+    setnames(ES_results_hetero_rf,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+
+    if(!is.null(endog_var)){
+      # first_stage; homogeneous_ATT = FALSE
+      # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+      ES_results_hetero_fs <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
+                                                        outcomevar = endog_var,
+                                                        unit_var = unit_var,
+                                                        onset_time_var = onset_time_var,
+                                                        cluster_vars = cluster_vars,
+                                                        homogeneous_ATT = homogeneous_ATT,
+                                                        omitted_event_time = omitted_event_time,
+                                                        discrete_covars = discrete_covars,
+                                                        cont_covars = cont_covars,
+                                                        ref_discrete_covars = ref_discrete_covars,
+                                                        ref_cont_covars = ref_cont_covars,
+                                                        residualize_covariates = residualize_covariates,
+                                                        reg_weights = reg_weights,
+                                                        ref_reg_weights = ref_reg_weights,
+                                                        ipw = ipw,
+                                                        ipw_composition_change = ipw_composition_change,
+                                                        add_unit_fes = add_unit_fes,
+                                                        cohort_by_cohort = cohort_by_cohort,
+                                                        cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)
+      gc()
+
+      catt_coefs_fs <- ES_results_hetero_fs[[2]]
+      catt_vcov_fs <- ES_results_hetero_fs[[3]]
+
+      ES_results_hetero_fs <- ES_results_hetero_fs[[1]]
+      gc()
+
+      setnames(ES_results_hetero_fs,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+
+    } else{
+      ES_results_hetero_fs <- NULL
+    }
   } else{
-    ES_results_hetero <- NULL
+    ES_results_hetero_rf <- NULL
+    ES_results_hetero_fs <- NULL
   }
-  ES_results_homo <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
-                                               outcomevar=outcomevar,
-                                               unit_var = unit_var,
-                                               onset_time_var = onset_time_var,
-                                               cluster_vars = cluster_vars,
-                                               homogeneous_ATT = TRUE,
-                                               omitted_event_time = omitted_event_time,
-                                               discrete_covars = discrete_covars,
-                                               cont_covars = cont_covars,
-                                               ref_discrete_covars = ref_discrete_covars,
-                                               ref_cont_covars = ref_cont_covars,
-                                               residualize_covariates = residualize_covariates,
-                                               reg_weights = reg_weights,
-                                               ref_reg_weights = ref_reg_weights,
-                                               ipw = ipw,
-                                               ipw_composition_change = ipw_composition_change,
-                                               add_unit_fes = add_unit_fes,
-                                               cohort_by_cohort = cohort_by_cohort,
-                                               cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+
+  # reduced form; homogeneous_ATT = TRUE
+  # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+  ES_results_homo_rf <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
+                                                  outcomevar = outcomevar,
+                                                  unit_var = unit_var,
+                                                  onset_time_var = onset_time_var,
+                                                  cluster_vars = cluster_vars,
+                                                  homogeneous_ATT = TRUE,
+                                                  omitted_event_time = omitted_event_time,
+                                                  discrete_covars = discrete_covars,
+                                                  cont_covars = cont_covars,
+                                                  ref_discrete_covars = ref_discrete_covars,
+                                                  ref_cont_covars = ref_cont_covars,
+                                                  residualize_covariates = residualize_covariates,
+                                                  reg_weights = reg_weights,
+                                                  ref_reg_weights = ref_reg_weights,
+                                                  ipw = ipw,
+                                                  ipw_composition_change = ipw_composition_change,
+                                                  add_unit_fes = add_unit_fes,
+                                                  cohort_by_cohort = cohort_by_cohort,
+                                                  cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
   gc()
-  setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+  setnames(ES_results_homo_rf,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+
+  if(!is.null(endog_var)){
+    # first_stage; homogeneous_ATT = TRUE
+    # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+    ES_results_homo_fs <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
+                                                    outcomevar = endog_var,
+                                                    unit_var = unit_var,
+                                                    onset_time_var = onset_time_var,
+                                                    cluster_vars = cluster_vars,
+                                                    homogeneous_ATT = TRUE,
+                                                    omitted_event_time = omitted_event_time,
+                                                    discrete_covars = discrete_covars,
+                                                    cont_covars = cont_covars,
+                                                    ref_discrete_covars = ref_discrete_covars,
+                                                    ref_cont_covars = ref_cont_covars,
+                                                    residualize_covariates = residualize_covariates,
+                                                    reg_weights = reg_weights,
+                                                    ref_reg_weights = ref_reg_weights,
+                                                    ipw = ipw,
+                                                    ipw_composition_change = ipw_composition_change,
+                                                    add_unit_fes = add_unit_fes,
+                                                    cohort_by_cohort = cohort_by_cohort,
+                                                    cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+    gc()
+    setnames(ES_results_homo_fs,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+  } else{
+    ES_results_homo_fs <- NULL
+  }
 
   # collect levels by treatment/control
   if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
     # STILL NEED TO FIX THE SEs to be WEIGHTED; for now use unweighted
-    ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = weighted.mean(get(outcomevar), get(na.omit(unique(c(reg_weights, ref_reg_weights))))), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+    ES_treatcontrol_means_rf <- ES_data[,list(rn="treatment_means", estimate = weighted.mean(get(outcomevar), get(na.omit(unique(c(reg_weights, ref_reg_weights))))), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+    if(!is.null(endog_var)){
+      ES_treatcontrol_means_fs <- ES_data[,list(rn="treatment_means", estimate = weighted.mean(get(endog_var), get(na.omit(unique(c(reg_weights, ref_reg_weights))))), cluster_se = sd(get(endog_var))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+    } else{
+      ES_treatcontrol_means_fs <- NULL
+    }
   } else{
-    ES_treatcontrol_means <- ES_data[,list(rn="treatment_means", estimate = mean(get(outcomevar)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+    ES_treatcontrol_means_rf <- ES_data[,list(rn="treatment_means", estimate = mean(get(outcomevar)), cluster_se = sd(get(outcomevar))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+    if(!is.null(endog_var)){
+      ES_treatcontrol_means_fs <- ES_data[,list(rn="treatment_means", estimate = mean(get(endog_var)), cluster_se = sd(get(endog_var))/sqrt(.N)),list(ref_onset_time,ref_event_time,treated)][order(ref_onset_time,ref_event_time,treated)]
+    } else{
+      ES_treatcontrol_means_fs <- NULL
+    }
   }
 
   # Collect CATT-specific-sample means of the outcome in the omitted_event_time (for scaling results)
-  means <- ES_data[ref_event_time == omitted_event_time, list(mean_outcome = mean(get(outcomevar))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
-  means[, pooled_mean := ES_data[ref_event_time == omitted_event_time, mean(get(outcomevar))]]
-
-  treat_means <- ES_data[ref_event_time == omitted_event_time & treated == 1, list(treat_mean_outcome = mean(get(outcomevar))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
-  treat_means[, treat_pooled_mean := ES_data[ref_event_time == omitted_event_time & treated == 1, mean(get(outcomevar))]]
+  means_rf <- ES_data[ref_event_time == omitted_event_time, list(mean_outcome = mean(get(outcomevar))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
+  means_rf[, pooled_mean := ES_data[ref_event_time == omitted_event_time, mean(get(outcomevar))]]
+  treat_means_rf <- ES_data[ref_event_time == omitted_event_time & treated == 1, list(treat_mean_outcome = mean(get(outcomevar))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
+  treat_means_rf[, treat_pooled_mean := ES_data[ref_event_time == omitted_event_time & treated == 1, mean(get(outcomevar))]]
 
   mapping <- ES_data[, .N, by = list(ref_onset_time,catt_specific_sample, ref_event_time)][order(ref_onset_time,catt_specific_sample,ref_event_time)]
   mapping <- mapping[ref_event_time != omitted_event_time]
-  means <- merge(means, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
-  treat_means <- merge(treat_means, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
+
+  means_rf <- merge(means_rf, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
+  treat_means_rf <- merge(treat_means_rf, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
+
+  if(!is.null(endog_var)){
+    means_fs <- ES_data[ref_event_time == omitted_event_time, list(mean_outcome = mean(get(endog_var))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
+    means_fs[, pooled_mean := ES_data[ref_event_time == omitted_event_time, mean(get(endog_var))]]
+    treat_means_fs <- ES_data[ref_event_time == omitted_event_time & treated == 1, list(treat_mean_outcome = mean(get(endog_var))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
+    treat_means_fs[, treat_pooled_mean := ES_data[ref_event_time == omitted_event_time & treated == 1, mean(get(endog_var))]]
+    means_fs <- merge(means_fs, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
+    treat_means_fs <- merge(treat_means_fs, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
+  } else{
+    means_fs <- NULL
+    treat_means_fs <- NULL
+  }
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
   # as we won't have an estimate for the omitted_event_time, exclude it below
@@ -681,7 +783,21 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   ES_data <- NULL
   gc()
 
-  figdata <- rbindlist(list(ES_results_hetero, ES_results_homo, ES_treatcontrol_means), use.names = TRUE, fill=TRUE)
+  figdata_rf <- rbindlist(list(ES_results_hetero_rf, ES_results_homo_rf, ES_treatcontrol_means_rf), use.names = TRUE, fill=TRUE)
+  rm(ES_results_hetero_rf, ES_results_homo_rf, ES_treatcontrol_means_rf)
+  figdata_rf[, model := "rf"]
+
+  if(!is.null(endog_var)){
+    figdata_fs <- rbindlist(list(ES_results_hetero_fs, ES_results_homo_fs, ES_treatcontrol_means_fs), use.names = TRUE, fill=TRUE)
+    rm(ES_results_hetero_fs, ES_results_homo_fs, ES_treatcontrol_means_fs)
+    figdata_fs[, model := "fs"]
+  } else{
+    figdata_fs <- NULL
+  }
+
+  figdata <- rbindlist(list(figdata_rf, figdata_fs), use.names = TRUE, fill = TRUE)
+  rm(figdata_rf)
+  rm(figdata_fs)
 
   # merge various *_unique_units into figdata
   # exclude catt_treated_unique_units/catt_total_unique_units as these will be added as part of (un)weighted means below
@@ -693,40 +809,49 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
   figdata <- merge(figdata, catt_total_unique_units, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
 
   subsets_for_avgs <- figdata[rn %in% c("catt")]
-  subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, cohort_weight_V1 := catt_treated_unique_units / sum(catt_treated_unique_units, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, cohort_weight_V2 := catt_total_unique_units / sum(catt_total_unique_units, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time, model)]
+  subsets_for_avgs[, cohort_weight_V1 := catt_treated_unique_units / sum(catt_treated_unique_units, na.rm = TRUE), by = list(ref_event_time, model)]
+  subsets_for_avgs[, cohort_weight_V2 := catt_total_unique_units / sum(catt_total_unique_units, na.rm = TRUE), by = list(ref_event_time, model)]
+  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time, model)]
+  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time, model)]
 
   # merge weights into figdata
-  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, cohort_weight_V1, cohort_weight_V2)]
-  figdata <- merge(figdata, weights, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, model, cohort_weight_V1, cohort_weight_V2)]
+  figdata <- merge(figdata, weights, by = c("ref_onset_time", "ref_event_time", "model"), all.x = TRUE, sort = FALSE)
 
   # rbind the (un)weighted avg estimates to figdata much like the "Pooled" data
-  subsets_for_avgs[, rowid := seq_len(.N), by = list(ref_event_time)]
+  subsets_for_avgs[, rowid := seq_len(.N), by = list(ref_event_time, model)]
   subsets_for_avgs <- subsets_for_avgs[rowid == 1 | is.na(rowid)]
 
-  unweighted <- subsets_for_avgs[, list(ref_event_time, unweighted_estimate)]
+  unweighted <- subsets_for_avgs[, list(ref_event_time, unweighted_estimate, model)]
   unweighted[, ref_onset_time := "Equally-Weighted"]
   unweighted[, rn := "att"]
   setnames(unweighted, c("unweighted_estimate"), c("estimate"))
-  setorderv(unweighted, c("ref_event_time"))
+  setorderv(unweighted, c("ref_event_time", "model"))
 
-  weighted_V1 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V1)]
+  weighted_V1 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V1, model)]
   weighted_V1[, ref_onset_time := "Cohort-Weighted"]
   weighted_V1[, rn := "att"]
   setnames(weighted_V1, c("weighted_estimate_V1"), c("estimate"))
-  setorderv(weighted_V1, c("ref_event_time"))
+  setorderv(weighted_V1, c("ref_event_time", "model"))
 
-  weighted_V2 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V2)]
+  weighted_V2 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V2, model)]
   weighted_V2[, ref_onset_time := "Cohort-Weighted V2"]
   weighted_V2[, rn := "att"]
   setnames(weighted_V2, c("weighted_estimate_V2"), c("estimate"))
-  setorderv(weighted_V2, c("ref_event_time"))
+  setorderv(weighted_V2, c("ref_event_time", "model"))
 
   figdata <- rbindlist(list(figdata, unweighted, weighted_V1, weighted_V2), use.names = TRUE, fill=TRUE)
   figdata[is.na(cluster_se), cluster_se := 0]
+
+  rm(subsets_for_avgs)
+  rm(weights)
+  rm(unweighted)
+  rm(weighted_V1)
+  rm(weighted_V2)
+  rm(catt_treated_unique_units)
+  rm(catt_total_unique_units)
+  gc()
 
   if(homogeneous_ATT == FALSE){
 
@@ -741,75 +866,86 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     min_onset_time <- min(onset_times)
     max_onset_time <- max(onset_times)
 
-    for(et in event_times){
-
-      if(et < 0){
-        lookfor <- sprintf("cattlead%s$", abs(et))
-        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
-      } else{
-        lookfor <- sprintf("catt%s$", abs(et))
-        # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
-      }
-      coef_indices <- grep(lookfor, names(catt_coefs))
-      rm(lookfor)
-      temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
-      setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
-      rm(coef_indices)
-      temp[, estimate := NULL]
-      temp[, rn := gsub("lead", "-", rn)]
-      for (c in min_onset_time:max_onset_time) {
-        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
-        temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
-      }
-      temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
-      temp[, rn := NULL]
-      temp[, ref_onset_time := as.character(ref_onset_time)]
-
-      # now merge in the weights
-      temp <- merge(temp, figdata[rn == "catt"], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
-      temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, cohort_weight_V1, cohort_weight_V2)]
-      temp[, equal_weight := 1 / .N]
-
-      temp[, equal_w_formula_entry := sprintf("(%s*x%s)", equal_weight, coef_index)]
-      temp[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", cohort_weight_V1, coef_index)]
-      temp[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", cohort_weight_V2, coef_index)]
-
-      equal_w_g_formula_input = paste0(temp$equal_w_formula_entry, collapse = "+")
-      cohort_w_v1_g_formula_input = paste0(temp$cohort_w_v1_formula_entry, collapse = "+")
-      cohort_w_v2_g_formula_input = paste0(temp$cohort_w_v2_formula_entry, collapse = "+")
-
-      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Equally-Weighted",
-              cluster_se := delta_method(g = as.formula(paste("~", equal_w_g_formula_input)),
-                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
-              )
-              ]
-
-      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted",
-              cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v1_g_formula_input)),
-                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
-              )
-              ]
-
-      figdata[rn == "att" & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted V2",
-              cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v2_g_formula_input)),
-                                         mean = catt_coefs, cov = catt_vcov, ses = TRUE
-              )
-              ]
-
-      rm(temp, equal_w_g_formula_input, cohort_w_v1_g_formula_input, cohort_w_v2_g_formula_input)
-
+    if(!is.null(endog_var)){
+      model_vals <- c("rf", "fs")
+    } else{
+      model_vals <- "rf"
     }
-  }
 
-  rm(subsets_for_avgs)
-  rm(weights)
-  rm(unweighted)
-  rm(weighted_V1)
-  rm(weighted_V2)
-  gc()
+    for(mm in model_vals){
+
+      for(et in event_times){
+
+        if(et < 0){
+          lookfor <- sprintf("cattlead%s$", abs(et))
+          # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
+        } else{
+          lookfor <- sprintf("catt%s$", abs(et))
+          # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+        }
+        coef_indices <- grep(lookfor, names(get(sprintf("catt_coefs_%s", mm))))
+        rm(lookfor)
+        temp <- as.data.table(do.call(cbind, list(get(sprintf("catt_coefs_%s", mm))[coef_indices], coef_indices)), keep.rownames = TRUE)
+        setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
+        rm(coef_indices)
+        temp[, estimate := NULL]
+        temp[, rn := gsub("lead", "-", rn)]
+        for (c in min_onset_time:max_onset_time) {
+          temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
+          temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
+        }
+        temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
+        temp[, rn := NULL]
+        temp[, ref_onset_time := as.character(ref_onset_time)]
+
+        # now merge in the weights
+        temp <- merge(temp, figdata[rn == "catt" & model == mm], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+        temp <- temp[, list(ref_onset_time, ref_event_time, coef_index, cohort_weight_V1, cohort_weight_V2)]
+        temp[, equal_weight := 1 / .N]
+
+        temp[, equal_w_formula_entry := sprintf("(%s*x%s)", equal_weight, coef_index)]
+        temp[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", cohort_weight_V1, coef_index)]
+        temp[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", cohort_weight_V2, coef_index)]
+
+        equal_w_g_formula_input = paste0(temp$equal_w_formula_entry, collapse = "+")
+        cohort_w_v1_g_formula_input = paste0(temp$cohort_w_v1_formula_entry, collapse = "+")
+        cohort_w_v2_g_formula_input = paste0(temp$cohort_w_v2_formula_entry, collapse = "+")
+
+        figdata[rn == "att" & model == mm & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Equally-Weighted",
+                cluster_se := delta_method(g = as.formula(paste("~", equal_w_g_formula_input)),
+                                           mean = get(sprintf("catt_coefs_%s", mm)),
+                                           cov = get(sprintf("catt_vcov_%s", mm)),
+                                           ses = TRUE
+                )
+                ]
+
+        figdata[rn == "att" & model == mm & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted",
+                cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v1_g_formula_input)),
+                                           mean = get(sprintf("catt_coefs_%s", mm)),
+                                           cov = get(sprintf("catt_vcov_%s", mm)),
+                                           ses = TRUE
+                )
+                ]
+
+        figdata[rn == "att" & model == mm & cluster_se == 0 & ref_event_time == et & ref_onset_time == "Cohort-Weighted V2",
+                cluster_se := delta_method(g = as.formula(paste("~", cohort_w_v2_g_formula_input)),
+                                           mean = get(sprintf("catt_coefs_%s", mm)),
+                                           cov = get(sprintf("catt_vcov_%s", mm)),
+                                           ses = TRUE
+                )
+                ]
+
+        rm(temp, equal_w_g_formula_input, cohort_w_v1_g_formula_input, cohort_w_v2_g_formula_input)
+
+      }
+    }
+    rm(et, mm)
+    gc()
+  }
 
   # merge in the sample sizes
   figdata <- merge(figdata, event_time_total_unique_units, by = "ref_event_time", all.x = TRUE, sort = FALSE)
+  rm(event_time_total_unique_units)
 
   # Now we calculate the collapsed estimates, if relevant
   if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
@@ -831,38 +967,38 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
       group_event_times <- setdiff(unique(na.omit(unlist(collapse_input_dt[name == g][[2]]))), omitted_event_time)
       dt <- figdata[(ref_event_time %in% group_event_times) & (rn == "catt")]
       dt[, grouping := g]
-      dt[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time)]
-      dt[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time)]
-      dt[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time)]
-      dt[, rowid := seq_len(.N), by = list(ref_event_time)]
+      dt[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time, model)]
+      dt[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time, model)]
+      dt[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time, model)]
+      dt[, rowid := seq_len(.N), by = list(ref_event_time, model)]
       result <- dt[rowid == 1 | is.na(rowid)]
-      dt <- dt[, list(ref_event_time, ref_onset_time, cohort_weight_V1, cohort_weight_V2, grouping)]
+      dt <- dt[, list(ref_event_time, ref_onset_time, model, cohort_weight_V1, cohort_weight_V2, grouping)]
 
-      ew[[j]] <- result[, list(grouping, unweighted_estimate)]
-      ew[[j]][, unweighted_estimate := mean(unweighted_estimate, na.rm = TRUE), by = list(grouping)]
+      ew[[j]] <- result[, list(grouping, model, unweighted_estimate)]
+      ew[[j]][, unweighted_estimate := mean(unweighted_estimate, na.rm = TRUE), by = list(grouping, model)]
       ew[[j]][, ref_onset_time := "Equally-Weighted + Collapsed"]
       ew[[j]][, rn := "att"]
-      ew[[j]][, rowid := seq_len(.N)]
+      ew[[j]][, rowid := seq_len(.N), by = list(model)]
       setnames(ew[[j]], c("unweighted_estimate"), c("estimate"))
       ew[[j]] <- ew[[j]][rowid == 1 | is.na(rowid)]
       ew[[j]][, rowid := NULL]
       ew[[j]][, cluster_se := 0]
 
-      cw[[j]] <- result[, list(grouping, weighted_estimate_V1)]
-      cw[[j]][, weighted_estimate_V1 := mean(weighted_estimate_V1, na.rm = TRUE), by = list(grouping)]
+      cw[[j]] <- result[, list(grouping, model, weighted_estimate_V1)]
+      cw[[j]][, weighted_estimate_V1 := mean(weighted_estimate_V1, na.rm = TRUE), by = list(grouping, model)]
       cw[[j]][, ref_onset_time := "Cohort-Weighted + Collapsed"]
       cw[[j]][, rn := "att"]
-      cw[[j]][, rowid := seq_len(.N)]
+      cw[[j]][, rowid := seq_len(.N), by = list(model)]
       setnames(cw[[j]], c("weighted_estimate_V1"), c("estimate"))
       cw[[j]] <- cw[[j]][rowid == 1 | is.na(rowid)]
       cw[[j]][, rowid := NULL]
       cw[[j]][, cluster_se := 0]
 
-      cw2[[j]] <- result[, list(grouping, weighted_estimate_V2)]
-      cw2[[j]][, weighted_estimate_V2 := mean(weighted_estimate_V2, na.rm = TRUE), by = list(grouping)]
+      cw2[[j]] <- result[, list(grouping, model, weighted_estimate_V2)]
+      cw2[[j]][, weighted_estimate_V2 := mean(weighted_estimate_V2, na.rm = TRUE), by = list(grouping, model)]
       cw2[[j]][, ref_onset_time := "Cohort-Weighted V2 + Collapsed"]
       cw2[[j]][, rn := "att"]
-      cw2[[j]][, rowid := seq_len(.N)]
+      cw2[[j]][, rowid := seq_len(.N), by = list(model)]
       setnames(cw2[[j]], c("weighted_estimate_V2"), c("estimate"))
       cw2[[j]] <- cw2[[j]][rowid == 1 | is.na(rowid)]
       cw2[[j]][, rowid := NULL]
@@ -870,92 +1006,104 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
       rm(result)
 
-      templist = list()
-      i = 0
-      for(et in group_event_times){
+      if(!is.null(endog_var)){
+        model_vals <- c("rf", "fs")
+      } else{
+        model_vals <- "rf"
+      }
 
-        i = i + 1
+      for(mm in model_vals){
 
-        if(et < 0){
-          lookfor <- sprintf("cattlead%s$", abs(et))
-          # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
-        } else{
-          lookfor <- sprintf("catt%s$", abs(et))
-          # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+        templist = list()
+        i = 0
+        for(et in group_event_times){
+
+          i = i + 1
+
+          if(et < 0){
+            lookfor <- sprintf("cattlead%s$", abs(et))
+            # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  -1 and -19:-10 event times
+          } else{
+            lookfor <- sprintf("catt%s$", abs(et))
+            # crucial to have the end-of-line anchor "$" above; otherwise will find, e.g.,  1 and 10:19 event times
+          }
+          coef_indices <- grep(lookfor, names(get(sprintf("catt_coefs_%s", mm))))
+          rm(lookfor)
+          temp <- as.data.table(do.call(cbind, list(get(sprintf("catt_coefs_%s", mm))[coef_indices], coef_indices)), keep.rownames = TRUE)
+          setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
+          rm(coef_indices)
+          temp[, estimate := NULL]
+          temp[, rn := gsub("lead", "-", rn)]
+          for (c in min_onset_time:max_onset_time) {
+            temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
+            temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
+          }
+          temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
+          temp[, rn := NULL]
+          temp[, ref_onset_time := as.character(ref_onset_time)]
+
+          # now merge in the within-event-time weights
+          temp <- merge(temp, dt[model == mm], by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+          temp[, weight_V0 := 1 / .N]
+
+          templist[[i]] <- copy(temp)
+          rm(temp)
+          gc()
+
         }
-        coef_indices <- grep(lookfor, names(catt_coefs))
-        rm(lookfor)
-        temp <- as.data.table(do.call(cbind, list(catt_coefs[coef_indices], coef_indices)), keep.rownames = TRUE)
-        setnames(temp, c("V1", "V2"), c("estimate", "coef_index"))
-        rm(coef_indices)
-        temp[, estimate := NULL]
-        temp[, rn := gsub("lead", "-", rn)]
-        for (c in min_onset_time:max_onset_time) {
-          temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), ref_onset_time := c]
-          temp[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
-        }
-        temp[grepl("catt", rn), ref_event_time := as.integer(gsub("catt", "", rn))]
-        temp[, rn := NULL]
-        temp[, ref_onset_time := as.character(ref_onset_time)]
+        rm(i)
 
-        # now merge in the within-event-time weights
-        temp <- merge(temp, dt, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
-        temp[, weight_V0 := 1 / .N]
+        templist <- rbindlist(templist, use.names = TRUE)
 
-        templist[[i]] <- copy(temp)
-        rm(temp)
-        gc()
+        # Now add the across-event-time weights and calculate full (multiplicative) weights
+        templist[, across_weight := (1 / uniqueN(ref_event_time))]
+        templist[, full_weight_V0 := weight_V0 * across_weight]
+        templist[, full_weight_V1 := cohort_weight_V1 * across_weight]
+        templist[, full_weight_V2 := cohort_weight_V2 * across_weight]
+
+        templist[, equal_w_formula_entry := sprintf("(%s*x%s)", full_weight_V0, coef_index)]
+        templist[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", full_weight_V1, coef_index)]
+        templist[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", full_weight_V2, coef_index)]
+
+        formula_input_ew = paste0(templist$equal_w_formula_entry, collapse = "+")
+        formula_input_cw = paste0(templist$cohort_w_v1_formula_entry, collapse = "+")
+        formula_input_cw2 = paste0(templist$cohort_w_v2_formula_entry, collapse = "+")
+
+        rm(templist)
+
+        ew[[j]][grouping == g & model == mm,
+                cluster_se := delta_method(g = as.formula(paste("~", formula_input_ew)),
+                                           mean = get(sprintf("catt_coefs_%s", mm)),
+                                           cov = get(sprintf("catt_vcov_%s", mm)),
+                                           ses = TRUE
+                )
+                ]
+
+        cw[[j]][grouping == g & model == mm,
+                cluster_se := delta_method(g = as.formula(paste("~", formula_input_cw)),
+                                           mean = get(sprintf("catt_coefs_%s", mm)),
+                                           cov = get(sprintf("catt_vcov_%s", mm)),
+                                           ses = TRUE
+                )
+                ]
+
+        cw2[[j]][grouping == g & model == mm,
+                 cluster_se := delta_method(g = as.formula(paste("~", formula_input_cw2)),
+                                            mean = get(sprintf("catt_coefs_%s", mm)),
+                                            cov = get(sprintf("catt_vcov_%s", mm)),
+                                            ses = TRUE
+                 )
+                 ]
+
+        rm(formula_input_ew)
+        rm(formula_input_cw)
+        rm(formula_input_cw2)
 
       }
-      rm(i)
       rm(dt)
 
-      templist <- rbindlist(templist, use.names = TRUE)
-
-      # Now add the across-event-time weights and calculate full (multiplicative) weights
-      templist[, across_weight := (1 / uniqueN(ref_event_time))]
-      templist[, full_weight_V0 := weight_V0 * across_weight]
-      templist[, full_weight_V1 := cohort_weight_V1 * across_weight]
-      templist[, full_weight_V2 := cohort_weight_V2 * across_weight]
-
-      templist[, equal_w_formula_entry := sprintf("(%s*x%s)", full_weight_V0, coef_index)]
-      templist[, cohort_w_v1_formula_entry := sprintf("(%s*x%s)", full_weight_V1, coef_index)]
-      templist[, cohort_w_v2_formula_entry := sprintf("(%s*x%s)", full_weight_V2, coef_index)]
-
-      formula_input_ew = paste0(templist$equal_w_formula_entry, collapse = "+")
-      formula_input_cw = paste0(templist$cohort_w_v1_formula_entry, collapse = "+")
-      formula_input_cw2 = paste0(templist$cohort_w_v2_formula_entry, collapse = "+")
-
-      rm(templist)
-
-      ew[[j]][grouping == g,
-              cluster_se := delta_method(g = as.formula(paste("~", formula_input_ew)),
-                                         mean = catt_coefs,
-                                         cov = catt_vcov,
-                                         ses = TRUE
-              )
-              ]
-
-      cw[[j]][grouping == g,
-              cluster_se := delta_method(g = as.formula(paste("~", formula_input_cw)),
-                                         mean = catt_coefs,
-                                         cov = catt_vcov,
-                                         ses = TRUE
-              )
-              ]
-
-      cw2[[j]][grouping == g,
-               cluster_se := delta_method(g = as.formula(paste("~", formula_input_cw2)),
-                                          mean = catt_coefs,
-                                          cov = catt_vcov,
-                                          ses = TRUE
-               )
-               ]
-
-      rm(formula_input_ew)
-      rm(formula_input_cw)
-      rm(formula_input_cw2)
     }
+
     rm(j)
     ew <- rbindlist(ew, use.names = TRUE)
     cw <- rbindlist(cw, use.names = TRUE)
@@ -967,18 +1115,64 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     cw2 <- merge(cw2, collapsed_estimate_total_unique_units, by = "grouping", all.x = TRUE, sort = FALSE)
 
     figdata <- rbindlist(list(figdata, ew, cw, cw2), use.names = TRUE, fill = TRUE)
+    rm(ew, cw, cw2)
+    rm(collapsed_estimate_total_unique_units)
     gc()
   }
 
   # add overall unique units count
   figdata[, total_unique_units := unique_units]
+  rm(unique_units)
+
+  # 'grouping' only relevant if calculate_collapse_estimates == TRUE, but easier to just generate a dummy column if not
+  if(calculate_collapse_estimates == FALSE){
+    figdata[, grouping := NA]
+    figdata[, collapsed_estimate_total_unique_units := NA]
+  }
+
+  # form ratios across models (rf/fs) by (ref_onset_time, ref_event_time, grouping)
+  if(!is.null(endog_var)){
+
+    ratio_data_rf <- figdata[rn %in% c("att", "catt") & model == "rf", list(ref_onset_time, ref_event_time, grouping, estimate, rn)]
+    setnames(ratio_data_rf, "estimate", "estimate_rf")
+
+    ratio_data_fs <- figdata[rn %in% c("att", "catt") & model == "fs", list(ref_onset_time, ref_event_time, grouping, estimate, rn)]
+    setnames(ratio_data_fs, "estimate", "estimate_fs")
+
+    ratio_data <- merge(ratio_data_rf, ratio_data_fs, by = c("ref_onset_time", "ref_event_time", "grouping", "rn"), sort = FALSE)
+    rm(ratio_data_rf, ratio_data_fs)
+    ratio_data[, estimate := (estimate_rf / estimate_fs)]
+    ratio_data[, c("estimate_rf", "estimate_fs") := NULL]
+
+    # merge in various counts to ratio data, then rbindlist back with figdata
+    # counts and weights will be the same across 'model' by (ref_onset_time, ref_event_time, grouping), so just need one
+    counts_and_weights <- figdata[rn %in% c("att", "catt") & model == "rf", list(ref_onset_time, ref_event_time, grouping, rn, reg_sample_size, catt_treated_unique_units, catt_total_unique_units, cohort_weight_V1, cohort_weight_V2, event_time_total_unique_units, collapsed_estimate_total_unique_units, total_unique_units)]
+    ratio_data <- merge(ratio_data, counts_and_weights, by = c("ref_onset_time", "ref_event_time", "grouping", "rn"), sort = FALSE)
+    ratio_data[, model := "ratio"]
+    ratio_data[, cluster_se := 0]
+
+    figdata <- rbindlist(list(figdata, ratio_data), use.names = TRUE, fill = TRUE)
+    rm(ratio_data)
+  }
+
+  # addin model name / renaming to make the models crystal clear; model == "ratio" already pretty clear
+  figdata[model == "rf", model := "reduced_form"]
+  figdata[model == "fs", model := "first_stage"]
+
+  means_rf[, model := "reduced_form"]
+  treat_means_rf[, model := "reduced_form"]
+
+  if(!is.null(endog_var)){
+    means_fs[, model := "first_stage"]
+    treat_means_fs[, model := "first_stage"]
+  }
 
   # start bootstrap run if relevant
   if(bootstrapES == TRUE){
 
-    # all arguments of by_cohort_bootstrap_ES are passed but for 'iter', which will be supplied by 1:bootstrap_iters below
+    # all arguments of Wald_bootstrap_ES are passed but for 'iter', which will be supplied by 1:bootstrap_iters below
     boot_results <- rbindlist(parallel::mclapply(X = 1:bootstrap_iters,
-                                                 FUN = by_cohort_bootstrap_ES,
+                                                 FUN = Wald_bootstrap_ES,
                                                  mc.silent = FALSE,
                                                  mc.cores = bootstrap_num_cores,
                                                  mc.set.seed = TRUE,
@@ -997,7 +1191,7 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
                                                  calculate_collapse_estimates = calculate_collapse_estimates, collapse_inputs = collapse_inputs,
                                                  ref_reg_weights = ref_reg_weights, ref_reg_weights_event_time = ref_reg_weights_event_time,
                                                  ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
-                                                 cohort_by_cohort = cohort_by_cohort, cohort_by_cohort_num_cores = cohort_by_cohort_num_cores),
+                                                 endog_var = endog_var, cohort_by_cohort = cohort_by_cohort, cohort_by_cohort_num_cores = cohort_by_cohort_num_cores),
                               use.names = TRUE
     )
 
@@ -1013,17 +1207,17 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
     }
 
     # Construct bootstrap CI for all of the estimates
-    boot_results_ses <- boot_results[, list(bootstrap_se = sd(estimate)), by = list(ref_onset_time, ref_event_time)]
+    boot_results_ses <- boot_results[, list(bootstrap_se = sd(estimate)), by = list(ref_onset_time, ref_event_time, model)]
     order_to_restore <- na.omit(unique(c(copy(colnames(figdata)),copy(colnames(boot_results_ses)))))
-    figdata <- merge(figdata, boot_results_ses, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+    figdata <- merge(figdata, boot_results_ses, by = c("ref_onset_time", "ref_event_time", "model"), all.x = TRUE, sort = FALSE)
     setcolorder(figdata, neworder = order_to_restore)
     rm(order_to_restore)
     figdata[rn == "treatment_means", bootstrap_se := NA]
 
     if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
-      boot_results_collapse_estimates_ses <- boot_results_collapse_estimates[, list(bootstrap_se_collapse = sd(estimate)), by = list(ref_onset_time, grouping)]
+      boot_results_collapse_estimates_ses <- boot_results_collapse_estimates[, list(bootstrap_se_collapse = sd(estimate)), by = list(ref_onset_time, grouping, model)]
       order_to_restore <- na.omit(unique(c(copy(colnames(figdata)),copy(colnames(boot_results_collapse_estimates_ses)))))
-      figdata <- merge(figdata, boot_results_collapse_estimates_ses, by = c("ref_onset_time", "grouping"), all.x = TRUE, sort = FALSE)
+      figdata <- merge(figdata, boot_results_collapse_estimates_ses, by = c("ref_onset_time", "grouping", "model"), all.x = TRUE, sort = FALSE)
       setcolorder(figdata, neworder = order_to_restore)
       rm(order_to_restore)
       figdata[!is.na(bootstrap_se_collapse), bootstrap_se := bootstrap_se_collapse]
@@ -1035,54 +1229,64 @@ by_cohort_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_ti
 
   }
 
+  if(ipw_keep_data == TRUE){
+    figdata <- rbindlist(list(figdata, ipw_dt), use.names = TRUE, fill = TRUE)
+  }
+
+  # Wrapping up all results into a list
+
   return_list = list()
   return_list[[1]] <- figdata
-  return_list[[2]] <- list(means, treat_means)
+  return_list[[2]] <- list(means_rf, means_fs)
+  return_list[[3]] <- list(treat_means_rf, treat_means_fs)
 
   if(homogeneous_ATT == FALSE){
-    return_list[[3]] <- list(catt_coefs, catt_vcov)
+    return_list[[4]] <- list(catt_coefs_rf, catt_vcov_rf)
+    if(!is.null(endog_var)){
+      return_list[[5]] <- list(catt_coefs_fs, catt_vcov_fs)
+    }
   }
 
   if(ipw_keep_data == TRUE){
-    return_list[[4]] <- ipw_dt
+    return_list[[6]] <- ipw_dt
   }
 
-  if(keep_all_bootstrap_results == TRUE){
-    return_list[[5]] <- bootstrap_output
+  if(bootstrapES == TRUE & keep_all_bootstrap_results == TRUE){
+    return_list[[7]] <- bootstrap_output
   }
 
-  flog.info('by_cohort_ES is finished.')
+  flog.info('Wald_ES is finished.')
 
   return(return_list)
 
 }
 
 #' @export
-# Need 'iter' to come first given how R reads the lapply/mclapply implementing by_cohort_bootstrap_ES()
-by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
-                                   omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
-                                   linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
-                                   control_subset_var=NA, control_subset_event_time=0,
-                                   treated_subset_var=NA, treated_subset_event_time=0,
-                                   control_subset_var2=NA, control_subset_event_time2=0,
-                                   treated_subset_var2=NA, treated_subset_event_time2=0,
-                                   discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
-                                   homogeneous_ATT = FALSE, reg_weights = NULL, add_unit_fes = FALSE,
-                                   ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_keep_data = FALSE, ipw_ps_lower_bound = 0, ipw_ps_upper_bound = 1,
-                                   event_vs_noevent = FALSE,
-                                   ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
-                                   calculate_collapse_estimates = FALSE, collapse_inputs = NULL,
-                                   ref_reg_weights = NULL, ref_reg_weights_event_time=0,
-                                   ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
-                                   cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
+# Need 'iter' to come first given how R reads the lapply/mclapply implementing Wald_bootstrap_ES()
+Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cluster_vars,
+                              omitted_event_time= -2, anticipation = 0, min_control_gap=1, max_control_gap=Inf,
+                              linearize_pretrends=FALSE, fill_zeros=FALSE, residualize_covariates = FALSE,
+                              control_subset_var=NA, control_subset_event_time=0,
+                              treated_subset_var=NA, treated_subset_event_time=0,
+                              control_subset_var2=NA, control_subset_event_time2=0,
+                              treated_subset_var2=NA, treated_subset_event_time2=0,
+                              discrete_covars = NULL, cont_covars = NULL, never_treat_action = 'none',
+                              homogeneous_ATT = FALSE, reg_weights = NULL, add_unit_fes = FALSE,
+                              ipw = FALSE, ipw_model = 'linear', ipw_composition_change = FALSE, ipw_keep_data = FALSE, ipw_ps_lower_bound = 0, ipw_ps_upper_bound = 1,
+                              event_vs_noevent = FALSE,
+                              ref_discrete_covars = NULL, ref_discrete_covar_event_time=0, ref_cont_covars = NULL, ref_cont_covar_event_time=0,
+                              calculate_collapse_estimates = FALSE, collapse_inputs = NULL,
+                              ref_reg_weights = NULL, ref_reg_weights_event_time=0,
+                              ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
+                              endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
 
-  # Function mirrors by_cohort_ES(), but with less printing/warning and skipping sections responsible for analytical standard errors and the like which aren't relevant
-  # We keep various checks to make sure no issues arise after the bootstrap sample is drawn
+  # Function mirrors Wald_ES(), but with less printing/warning and skipping sections responsible for analytical standard errors and the like which aren't relevant
+  # We keep various checks to make sure no issues arise due to a potential strange bootstrap sample draw
 
   bs_long_data <- block_sample(long_data = copy(long_data), unit_var = unit_var, cal_time_var = cal_time_var)
   gc()
 
-  flog.info(sprintf("Beginning bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+  flog.info(sprintf("Beginning Wald_bootstrap_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
 
   # type checks
   assertDataTable(bs_long_data)
@@ -1127,7 +1331,7 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
   assertFlag(linearize_pretrends)
   assertFlag(fill_zeros)
   assertFlag(residualize_covariates)
-  if(residualize_covariates){
+  if(residualize_covariates == TRUE){
     if(!any(testCharacter(discrete_covars), testCharacter(cont_covars))){
       stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
     }
@@ -1138,6 +1342,11 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
   assertFlag(ipw_composition_change)
   assertNumber(ipw_ps_lower_bound,lower=0,upper=1)
   assertNumber(ipw_ps_upper_bound,lower=0,upper=1)
+  if(ipw == TRUE){
+    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars), testCharacter(ref_discrete_covars), testCharacter(ref_cont_covars))){
+      stop("Since ipw=TRUE, either discrete_covars, cont_covars, ref_discrete_covars, or ref_cont_covars must be provided as a character vector.")
+    }
+  }
   assertFlag(calculate_collapse_estimates)
   if(calculate_collapse_estimates == TRUE){
     assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
@@ -1147,6 +1356,9 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
     assertIntegerish(ntiles,len=1,lower=2)
     assertIntegerish(ntile_var_value,len=1,lower=1,upper=ntiles)
     assertFlag(ntile_avg)
+  }
+  if(!is.null(endog_var)){
+    assertCharacter(endog_var,len=1)
   }
   assertFlag(cohort_by_cohort)
   assertIntegerish(cohort_by_cohort_num_cores,len=1,lower=1)
@@ -1212,6 +1424,9 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
   if(testCharacter(ntile_var)){
     if(!(ntile_var %in% names(bs_long_data))){stop(sprintf("Variable ntile_var='%s' is not in the bs_long_data you provided.",ntile_var))}
   }
+  if(testCharacter(endog_var)){
+    if(!(endog_var %in% names(bs_long_data))){stop(sprintf("Variable endog_var='%s' is not in the bs_long_data you provided.",endog_var))}
+  }
 
   # temporary check -- code is currently not set up to accept ntile_event_time != omitted_event_time
   # only bites in the case where !is.null(ntile_var) and omitted_event_time != ntile_event_time
@@ -1253,7 +1468,7 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # check that user only supplied one of reg_weights / ref_reg_weights, but not both
   if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
-    stop("Supplied variables for both reg_weights and ref_reg_weights, but bootstrap_by_cohort_ES() only admits using one or the other type of weight (or neither).")
+    stop("Supplied variables for both reg_weights and ref_reg_weights, but Wald_bootstrap_ES() only admits using one or the other type of weight (or neither).")
   }
 
   # check that user correctly input what to do with never treated
@@ -1292,9 +1507,9 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # fill with zeros
   if(fill_zeros){
-    flog.info(sprintf("Filling in zeros in bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+    flog.info(sprintf("Filling in zeros in Wald_bootstrap_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
     bs_long_data <- ES_expand_to_balance(long_data = bs_long_data,
-                                         vars_to_fill = outcomevar,
+                                         vars_to_fill = na.omit(unique(c(outcomevar, endog_var))),
                                          unit_var = unit_var,
                                          cal_time_var = cal_time_var,
                                          onset_time_var = onset_time_var)
@@ -1313,23 +1528,18 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # linearize pre-trends; never-treated will be treated as a single cohort
   if(linearize_pretrends){
-    flog.info(sprintf("Linearizing pre-trends in bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
-    bs_long_data <- ES_parallelize_trends(long_data = bs_long_data, outcomevar = outcomevar,
-                                          unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
-                                          anticipation = anticipation, reg_weights = reg_weights)
+    # Not straightforward what to do in the case where !is.null(endog_var)
+    flog.info("NOT CURRENTLY Linearizing pre-trends.")
   }
 
   # extrapolate contribution of covariates using pre-treated period
-  if(residualize_covariates){
-    flog.info(sprintf("Residualizing on covariates in bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
-    bs_long_data <- ES_residualize_covariates(long_data = bs_long_data, outcomevar = outcomevar,
-                                              unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
-                                              anticipation = anticipation, discrete_covars = discrete_covars, cont_covars = cont_covars,
-                                              reg_weights = reg_weights)
+  if(residualize_covariates == TRUE){
+    # Not straightforward what to do in the case where !is.null(endog_var)
+    flog.info("NOT CURRENTLY Residualizing on covariates.")
   }
 
   # process data
-  flog.info(sprintf("Beginning data stacking in bootstrap_by_cohort_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
+  flog.info(sprintf("Beginning data stacking in Wald_bootstrap_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
   bs_ES_data <- ES_clean_data(long_data = bs_long_data, outcomevar = outcomevar,
                               unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
                               anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap, omitted_event_time = omitted_event_time,
@@ -1340,7 +1550,8 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
                               never_treat_action = never_treat_action, never_treat_val = never_treat_val,
                               cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights, event_vs_noevent = event_vs_noevent,
                               ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars, ref_reg_weights = ref_reg_weights,
-                              ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg)
+                              ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
+                              endog_var = endog_var)
 
   # construct discrete covariates specific to a ref_event_time
   # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
@@ -1359,7 +1570,7 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
         # For a variable that is a character, will need to generate a numeric
         # Note: if there are missings, this will assign them all to a single level
         if(class(bs_ES_data[[var]]) == "character"){
-          bs_ES_data[, (varname) := .GRP, by = var]
+          bs_ES_data[, (varname) := .GRP, keyby = var]
         } else{
           bs_ES_data[, (varname) := get(var)]
         }
@@ -1374,7 +1585,7 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
         # For a variable that is a character, will need to generate a numeric
         if(class(bs_ES_data[[var]]) == "character"){
-          bs_ES_data[, varnum := .GRP, by = var]
+          bs_ES_data[, varnum := .GRP, keyby = var]
           bs_ES_data[, (varname) := NULL]
           setnames(bs_ES_data, "varnum", varname)
           # ^need to do it this way because (varname) is character and redefining and assigning in one step is a pain
@@ -1469,7 +1680,7 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
   if(ipw == TRUE){
 
     # Within each DiD sample, estimate weights to balance provided covariates
-    bs_ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
+    bs_ES_data[, did_id := .GRP, keyby = list(ref_onset_time, catt_specific_sample)]
     did_ids <- bs_ES_data[, sort(unique(did_id))]
 
     if(ipw_composition_change == FALSE){
@@ -1478,7 +1689,7 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
       for(i in did_ids){
 
-        ipw_dt <- ES_make_ipw_dt(did_dt = copy(bs_ES_data[did_id == i]),
+        ipw_dt <- ES_make_ipw_dt2(did_dt = copy(bs_ES_data[did_id == i]),
                                  unit_var = unit_var,
                                  cal_time_var = cal_time_var,
                                  discrete_covars = discrete_covars,
@@ -1518,51 +1729,115 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
-    ES_results_hetero <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
-                                                   outcomevar=outcomevar,
-                                                   unit_var = unit_var,
-                                                   onset_time_var = onset_time_var,
-                                                   cluster_vars = cluster_vars,
-                                                   homogeneous_ATT = homogeneous_ATT,
-                                                   omitted_event_time = omitted_event_time,
-                                                   discrete_covars = discrete_covars,
-                                                   cont_covars = cont_covars,
-                                                   ref_discrete_covars = ref_discrete_covars,
-                                                   ref_cont_covars = ref_cont_covars,
-                                                   residualize_covariates = residualize_covariates,
-                                                   reg_weights = reg_weights,
-                                                   ref_reg_weights = ref_reg_weights,
-                                                   ipw = ipw,
-                                                   ipw_composition_change = ipw_composition_change,
-                                                   add_unit_fes = add_unit_fes,
-                                                   cohort_by_cohort = cohort_by_cohort,
-                                                   cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+
+    # reduced form; homogeneous_ATT = FALSE
+    # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+    ES_results_hetero_rf <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
+                                                      outcomevar = outcomevar,
+                                                      unit_var = unit_var,
+                                                      onset_time_var = onset_time_var,
+                                                      cluster_vars = cluster_vars,
+                                                      homogeneous_ATT = homogeneous_ATT,
+                                                      omitted_event_time = omitted_event_time,
+                                                      discrete_covars = discrete_covars,
+                                                      cont_covars = cont_covars,
+                                                      ref_discrete_covars = ref_discrete_covars,
+                                                      ref_cont_covars = ref_cont_covars,
+                                                      residualize_covariates = residualize_covariates,
+                                                      reg_weights = reg_weights,
+                                                      ref_reg_weights = ref_reg_weights,
+                                                      ipw = ipw,
+                                                      ipw_composition_change = ipw_composition_change,
+                                                      add_unit_fes = add_unit_fes,
+                                                      cohort_by_cohort = cohort_by_cohort,
+                                                      cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
     gc()
-    setnames(ES_results_hetero,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+    setnames(ES_results_hetero_rf,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+
+    if(!is.null(endog_var)){
+      # first_stage; homogeneous_ATT = FALSE
+      # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+      ES_results_hetero_fs <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
+                                                        outcomevar = endog_var,
+                                                        unit_var = unit_var,
+                                                        onset_time_var = onset_time_var,
+                                                        cluster_vars = cluster_vars,
+                                                        homogeneous_ATT = homogeneous_ATT,
+                                                        omitted_event_time = omitted_event_time,
+                                                        discrete_covars = discrete_covars,
+                                                        cont_covars = cont_covars,
+                                                        ref_discrete_covars = ref_discrete_covars,
+                                                        ref_cont_covars = ref_cont_covars,
+                                                        residualize_covariates = residualize_covariates,
+                                                        reg_weights = reg_weights,
+                                                        ref_reg_weights = ref_reg_weights,
+                                                        ipw = ipw,
+                                                        ipw_composition_change = ipw_composition_change,
+                                                        add_unit_fes = add_unit_fes,
+                                                        cohort_by_cohort = cohort_by_cohort,
+                                                        cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+      gc()
+      setnames(ES_results_hetero_fs,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+    } else{
+      ES_results_hetero_fs <- NULL
+    }
+
   } else{
-    ES_results_hetero <- NULL
+    ES_results_hetero_rf <- NULL
+    ES_results_hetero_fs <- NULL
   }
-  ES_results_homo <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
-                                               outcomevar=outcomevar,
-                                               unit_var = unit_var,
-                                               onset_time_var = onset_time_var,
-                                               cluster_vars = cluster_vars,
-                                               homogeneous_ATT = TRUE,
-                                               omitted_event_time = omitted_event_time,
-                                               discrete_covars = discrete_covars,
-                                               cont_covars = cont_covars,
-                                               ref_discrete_covars = ref_discrete_covars,
-                                               ref_cont_covars = ref_cont_covars,
-                                               residualize_covariates = residualize_covariates,
-                                               reg_weights = reg_weights,
-                                               ref_reg_weights = ref_reg_weights,
-                                               ipw = ipw,
-                                               ipw_composition_change = ipw_composition_change,
-                                               add_unit_fes = add_unit_fes,
-                                               cohort_by_cohort = cohort_by_cohort,
-                                               cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+
+  # reduced form; homogeneous_ATT = TRUE
+  # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+  ES_results_homo_rf <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
+                                                  outcomevar = outcomevar,
+                                                  unit_var = unit_var,
+                                                  onset_time_var = onset_time_var,
+                                                  cluster_vars = cluster_vars,
+                                                  homogeneous_ATT = TRUE,
+                                                  omitted_event_time = omitted_event_time,
+                                                  discrete_covars = discrete_covars,
+                                                  cont_covars = cont_covars,
+                                                  ref_discrete_covars = ref_discrete_covars,
+                                                  ref_cont_covars = ref_cont_covars,
+                                                  residualize_covariates = residualize_covariates,
+                                                  reg_weights = reg_weights,
+                                                  ref_reg_weights = ref_reg_weights,
+                                                  ipw = ipw,
+                                                  ipw_composition_change = ipw_composition_change,
+                                                  add_unit_fes = add_unit_fes,
+                                                  cohort_by_cohort = cohort_by_cohort,
+                                                  cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
   gc()
-  setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+  setnames(ES_results_homo_rf,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+
+  if(!is.null(endog_var)){
+    # first_stage; homogeneous_ATT = TRUE
+    # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+    ES_results_homo_fs <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
+                                                    outcomevar = endog_var,
+                                                    unit_var = unit_var,
+                                                    onset_time_var = onset_time_var,
+                                                    cluster_vars = cluster_vars,
+                                                    homogeneous_ATT = TRUE,
+                                                    omitted_event_time = omitted_event_time,
+                                                    discrete_covars = discrete_covars,
+                                                    cont_covars = cont_covars,
+                                                    ref_discrete_covars = ref_discrete_covars,
+                                                    ref_cont_covars = ref_cont_covars,
+                                                    residualize_covariates = residualize_covariates,
+                                                    reg_weights = reg_weights,
+                                                    ref_reg_weights = ref_reg_weights,
+                                                    ipw = ipw,
+                                                    ipw_composition_change = ipw_composition_change,
+                                                    add_unit_fes = add_unit_fes,
+                                                    cohort_by_cohort = cohort_by_cohort,
+                                                    cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+    gc()
+    setnames(ES_results_homo_fs,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+  } else{
+    ES_results_homo_fs <- NULL
+  }
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
   # as we won't have an estimate for the omitted_event_time, exclude it below
@@ -1619,7 +1894,21 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
   bs_ES_data <- NULL
   gc()
 
-  figdata <- rbindlist(list(ES_results_hetero, ES_results_homo), use.names = TRUE, fill=TRUE)
+  figdata_rf <- rbindlist(list(ES_results_hetero_rf, ES_results_homo_rf), use.names = TRUE, fill=TRUE)
+  rm(ES_results_hetero_rf, ES_results_homo_rf)
+  figdata_rf[, model := "rf"]
+
+  if(!is.null(endog_var)){
+    figdata_fs <- rbindlist(list(ES_results_hetero_fs, ES_results_homo_fs), use.names = TRUE, fill=TRUE)
+    rm(ES_results_hetero_fs, ES_results_homo_fs)
+    figdata_fs[, model := "fs"]
+  } else{
+    figdata_fs <- NULL
+  }
+
+  figdata <- rbindlist(list(figdata_rf, figdata_fs), use.names = TRUE, fill = TRUE)
+  rm(figdata_rf)
+  rm(figdata_fs)
 
   # merge various *_unique_units into figdata
   # exclude catt_treated_unique_units/catt_total_unique_units as these will be added as part of (un)weighted means below
@@ -1631,37 +1920,37 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
   figdata <- merge(figdata, catt_total_unique_units, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
 
   subsets_for_avgs <- figdata[rn %in% c("catt")]
-  subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, cohort_weight_V1 := catt_treated_unique_units / sum(catt_treated_unique_units, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, cohort_weight_V2 := catt_total_unique_units / sum(catt_total_unique_units, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time)]
-  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time)]
+  subsets_for_avgs[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time, model)]
+  subsets_for_avgs[, cohort_weight_V1 := catt_treated_unique_units / sum(catt_treated_unique_units, na.rm = TRUE), by = list(ref_event_time, model)]
+  subsets_for_avgs[, cohort_weight_V2 := catt_total_unique_units / sum(catt_total_unique_units, na.rm = TRUE), by = list(ref_event_time, model)]
+  subsets_for_avgs[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time, model)]
+  subsets_for_avgs[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time, model)]
 
   # merge weights into figdata
-  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, cohort_weight_V1, cohort_weight_V2)]
-  figdata <- merge(figdata, weights, by = c("ref_onset_time", "ref_event_time"), all.x = TRUE, sort = FALSE)
+  weights <- subsets_for_avgs[, list(ref_event_time, ref_onset_time, model, cohort_weight_V1, cohort_weight_V2)]
+  figdata <- merge(figdata, weights, by = c("ref_onset_time", "ref_event_time", "model"), all.x = TRUE, sort = FALSE)
 
   # rbind the (un)weighted avg estimates to figdata much like the "Pooled" data
-  subsets_for_avgs[, rowid := seq_len(.N), by = list(ref_event_time)]
+  subsets_for_avgs[, rowid := seq_len(.N), by = list(ref_event_time, model)]
   subsets_for_avgs <- subsets_for_avgs[rowid == 1 | is.na(rowid)]
 
-  unweighted <- subsets_for_avgs[, list(ref_event_time, unweighted_estimate)]
+  unweighted <- subsets_for_avgs[, list(ref_event_time, unweighted_estimate, model)]
   unweighted[, ref_onset_time := "Equally-Weighted"]
   unweighted[, rn := "att"]
   setnames(unweighted, c("unweighted_estimate"), c("estimate"))
-  setorderv(unweighted, c("ref_event_time"))
+  setorderv(unweighted, c("ref_event_time", "model"))
 
-  weighted_V1 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V1)]
+  weighted_V1 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V1, model)]
   weighted_V1[, ref_onset_time := "Cohort-Weighted"]
   weighted_V1[, rn := "att"]
   setnames(weighted_V1, c("weighted_estimate_V1"), c("estimate"))
-  setorderv(weighted_V1, c("ref_event_time"))
+  setorderv(weighted_V1, c("ref_event_time", "model"))
 
-  weighted_V2 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V2)]
+  weighted_V2 <- subsets_for_avgs[, list(ref_event_time, weighted_estimate_V2, model)]
   weighted_V2[, ref_onset_time := "Cohort-Weighted V2"]
   weighted_V2[, rn := "att"]
   setnames(weighted_V2, c("weighted_estimate_V2"), c("estimate"))
-  setorderv(weighted_V2, c("ref_event_time"))
+  setorderv(weighted_V2, c("ref_event_time", "model"))
 
   figdata <- rbindlist(list(figdata, unweighted, weighted_V1, weighted_V2), use.names = TRUE, fill=TRUE)
   figdata[is.na(cluster_se), cluster_se := 0]
@@ -1671,10 +1960,13 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
   rm(unweighted)
   rm(weighted_V1)
   rm(weighted_V2)
+  rm(catt_treated_unique_units)
+  rm(catt_total_unique_units)
   gc()
 
   # merge in the sample sizes
   figdata <- merge(figdata, event_time_total_unique_units, by = "ref_event_time", all.x = TRUE, sort = FALSE)
+  rm(event_time_total_unique_units)
 
   # Now we calculate the collapsed estimates, if relevant
   if(calculate_collapse_estimates == TRUE & homogeneous_ATT == FALSE){
@@ -1696,600 +1988,104 @@ by_cohort_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_ti
       group_event_times <- setdiff(unique(na.omit(unlist(collapse_input_dt[name == g][[2]]))), omitted_event_time)
       dt <- figdata[(ref_event_time %in% group_event_times) & (rn == "catt")]
       dt[, grouping := g]
-      dt[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time)]
-      dt[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time)]
-      dt[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time)]
-      dt[, rowid := seq_len(.N), by = list(ref_event_time)]
+      dt[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time, model)]
+      dt[, weighted_estimate_V1 := weighted.mean(x = estimate, w = cohort_weight_V1, na.rm = TRUE), by = list(ref_event_time, model)]
+      dt[, weighted_estimate_V2 := weighted.mean(x = estimate, w = cohort_weight_V2, na.rm = TRUE), by = list(ref_event_time, model)]
+      dt[, rowid := seq_len(.N), by = list(ref_event_time, model)]
       result <- dt[rowid == 1 | is.na(rowid)]
-      dt <- dt[, list(ref_event_time, ref_onset_time, cohort_weight_V1, cohort_weight_V2, grouping)]
+      dt <- dt[, list(ref_event_time, ref_onset_time, model, cohort_weight_V1, cohort_weight_V2, grouping)]
 
-      ew[[j]] <- result[, list(grouping, unweighted_estimate)]
-      ew[[j]][, unweighted_estimate := mean(unweighted_estimate, na.rm = TRUE), by = list(grouping)]
+      ew[[j]] <- result[, list(grouping, model, unweighted_estimate)]
+      ew[[j]][, unweighted_estimate := mean(unweighted_estimate, na.rm = TRUE), by = list(grouping, model)]
       ew[[j]][, ref_onset_time := "Equally-Weighted + Collapsed"]
       ew[[j]][, rn := "att"]
-      ew[[j]][, rowid := seq_len(.N)]
+      ew[[j]][, rowid := seq_len(.N), by = list(model)]
       setnames(ew[[j]], c("unweighted_estimate"), c("estimate"))
       ew[[j]] <- ew[[j]][rowid == 1 | is.na(rowid)]
       ew[[j]][, rowid := NULL]
       ew[[j]][, cluster_se := 0]
 
-      cw[[j]] <- result[, list(grouping, weighted_estimate_V1)]
-      cw[[j]][, weighted_estimate_V1 := mean(weighted_estimate_V1, na.rm = TRUE), by = list(grouping)]
+      cw[[j]] <- result[, list(grouping, model, weighted_estimate_V1)]
+      cw[[j]][, weighted_estimate_V1 := mean(weighted_estimate_V1, na.rm = TRUE), by = list(grouping, model)]
       cw[[j]][, ref_onset_time := "Cohort-Weighted + Collapsed"]
       cw[[j]][, rn := "att"]
-      cw[[j]][, rowid := seq_len(.N)]
+      cw[[j]][, rowid := seq_len(.N), by = list(model)]
       setnames(cw[[j]], c("weighted_estimate_V1"), c("estimate"))
       cw[[j]] <- cw[[j]][rowid == 1 | is.na(rowid)]
       cw[[j]][, rowid := NULL]
       cw[[j]][, cluster_se := 0]
 
-      cw2[[j]] <- result[, list(grouping, weighted_estimate_V2)]
-      cw2[[j]][, weighted_estimate_V2 := mean(weighted_estimate_V2, na.rm = TRUE), by = list(grouping)]
+      cw2[[j]] <- result[, list(grouping, model, weighted_estimate_V2)]
+      cw2[[j]][, weighted_estimate_V2 := mean(weighted_estimate_V2, na.rm = TRUE), by = list(grouping, model)]
       cw2[[j]][, ref_onset_time := "Cohort-Weighted V2 + Collapsed"]
       cw2[[j]][, rn := "att"]
-      cw2[[j]][, rowid := seq_len(.N)]
+      cw2[[j]][, rowid := seq_len(.N), by = list(model)]
       setnames(cw2[[j]], c("weighted_estimate_V2"), c("estimate"))
       cw2[[j]] <- cw2[[j]][rowid == 1 | is.na(rowid)]
       cw2[[j]][, rowid := NULL]
       cw2[[j]][, cluster_se := 0]
 
-      rm(result)
+      rm(dt, result)
     }
+
     rm(j)
     ew <- rbindlist(ew, use.names = TRUE)
     cw <- rbindlist(cw, use.names = TRUE)
     cw2 <- rbindlist(cw2, use.names = TRUE)
 
+    # merge in sample size for each collapse grouping
+    ew <- merge(ew, collapsed_estimate_total_unique_units, by = "grouping", all.x = TRUE, sort = FALSE)
+    cw <- merge(cw, collapsed_estimate_total_unique_units, by = "grouping", all.x = TRUE, sort = FALSE)
+    cw2 <- merge(cw2, collapsed_estimate_total_unique_units, by = "grouping", all.x = TRUE, sort = FALSE)
+
     figdata <- rbindlist(list(figdata, ew, cw, cw2), use.names = TRUE, fill = TRUE)
+    rm(ew, cw, cw2)
+    rm(collapsed_estimate_total_unique_units)
     gc()
   }
 
   # add overall unique units count
   figdata[, total_unique_units := unique_units]
+  rm(unique_units)
+
+  # 'grouping' and'collapsed_estimate_total_unique_units' only relevant if calculate_collapse_estimates == TRUE, but easier to just generate a dummy columns if not
+  if(calculate_collapse_estimates == FALSE){
+    figdata[, grouping := NA]
+    figdata[, collapsed_estimate_total_unique_units := NA]
+  }
+
+  # form ratios across models (rf/fs) by (ref_onset_time, ref_event_time, grouping)
+  if(!is.null(endog_var)){
+
+    ratio_data_rf <- figdata[rn %in% c("att", "catt") & model == "rf", list(ref_onset_time, ref_event_time, grouping, estimate, rn)]
+    setnames(ratio_data_rf, "estimate", "estimate_rf")
+
+    ratio_data_fs <- figdata[rn %in% c("att", "catt") & model == "fs", list(ref_onset_time, ref_event_time, grouping, estimate, rn)]
+    setnames(ratio_data_fs, "estimate", "estimate_fs")
+
+    ratio_data <- merge(ratio_data_rf, ratio_data_fs, by = c("ref_onset_time", "ref_event_time", "grouping", "rn"), sort = FALSE)
+    rm(ratio_data_rf, ratio_data_fs)
+    ratio_data[, estimate := (estimate_rf / estimate_fs)]
+    ratio_data[, c("estimate_rf", "estimate_fs") := NULL]
+
+    # merge in various counts to ratio data, then rbindlist back with figdata
+    # counts and weights will be the same across 'model' by (ref_onset_time, ref_event_time, grouping), so just need one
+    counts_and_weights <- figdata[rn %in% c("att", "catt") & model == "rf", list(ref_onset_time, ref_event_time, grouping, rn, reg_sample_size, catt_treated_unique_units, catt_total_unique_units, cohort_weight_V1, cohort_weight_V2, event_time_total_unique_units, collapsed_estimate_total_unique_units, total_unique_units)]
+    ratio_data <- merge(ratio_data, counts_and_weights, by = c("ref_onset_time", "ref_event_time", "grouping", "rn"), sort = FALSE)
+    ratio_data[, model := "ratio"]
+    ratio_data[, cluster_se := 0]
+
+    figdata <- rbindlist(list(figdata, ratio_data), use.names = TRUE, fill = TRUE)
+    rm(ratio_data)
+  }
 
   figdata[, bootstrap_sample := iter]
 
-  flog.info(sprintf("bootstrap_by_cohort_ES iteration %s is finished.", format(iter, scientific = FALSE, big.mark = ",")))
+  # renaming to make the models crystal clear; model == "ratio" already pretty clear
+  figdata[model == "rf", model := "reduced_form"]
+  figdata[model == "fs", model := "first_stage"]
+
+  flog.info(sprintf("Wald_bootstrap_ES iteration %s is finished.", format(iter, scientific = FALSE, big.mark = ",")))
 
   return(figdata)
-}
-
-#' @export
-by_cohort_ES_estimate_ATT <- function(ES_data,
-                                      outcomevar,
-                                      unit_var,
-                                      onset_time_var,
-                                      cluster_vars,
-                                      residualize_covariates = FALSE,
-                                      discrete_covars = NULL,
-                                      cont_covars = NULL,
-                                      ref_discrete_covars = NULL,
-                                      ref_cont_covars = NULL,
-                                      homogeneous_ATT = TRUE,
-                                      omitted_event_time = -2,
-                                      reg_weights = NULL,
-                                      ref_reg_weights = NULL,
-                                      ipw = FALSE,
-                                      ipw_composition_change = FALSE,
-                                      add_unit_fes = FALSE,
-                                      cohort_by_cohort = FALSE,
-                                      cohort_by_cohort_num_cores = 1
-) {
-
-  # Structure of code
-  # 1) For heterogeneous effects across cohorts, can either estimate altogehter (cohort_by_cohort == FALSE) or cohort-by-cohort (cohort_by_cohort == TRUE)
-  # 2) For homogeneous effects across cohorts (but still heterogeneous across event times), value of cohort_by_cohort is not relevant
-
-  onset_times <- sort(unique(ES_data[, .N, by = eval(onset_time_var)][[onset_time_var]]))
-  min_onset_time <- min(onset_times)
-  max_onset_time <- max(onset_times)
-
-  ES_data[, ref_onset_ref_event_time := .GRP, by = list(ref_onset_time, ref_event_time)]
-
-  if(add_unit_fes == TRUE){
-    ES_data[, unit_sample := .GRP, by = list(get(unit_var), catt_specific_sample, ref_onset_time)]
-  } else{
-    ES_data[, unit_sample := .GRP, by = list(get(onset_time_var), catt_specific_sample, ref_onset_time)]
-  }
-
-  # felm() will necessarily drop singletons on unit_sample, so we just exclude those now
-  # in practice, this step should only have bite if add_unit_fes == TRUE
-  ES_data[, unit_var_block_count := .N, by = list(unit_sample)]
-  count_dropcases <- dim(ES_data[unit_var_block_count <= 1])[1]
-  if(count_dropcases > 0){
-    ES_data <- ES_data[unit_var_block_count > 1]
-    rm(count_dropcases)
-  }
-  ES_data[, unit_var_block_count := NULL]
-  gc()
-
-  # define the unique reference onset times now, after all known pre-drops of observations have been done
-  ref_onset_times <- sort(unique(ES_data[, .N, by = list(ref_onset_time)][["ref_onset_time"]]))
-
-  if(!(is.null(cluster_vars))){
-    ES_data[, cluster_on_this := .GRP, by = cluster_vars]
-    cluster_on_this <- "cluster_on_this"
-  } else{
-    # White / robust SEs
-    cluster_on_this <- 0
-  }
-
-  start_cols <- copy(colnames(ES_data))
-
-  if (homogeneous_ATT == FALSE) {
-
-    if(cohort_by_cohort == FALSE){
-
-      if(residualize_covariates == FALSE & ipw == FALSE){
-
-        if((!is.null(discrete_covars)) | (!is.null(ref_discrete_covars)) ){
-
-          # For felm(), want to tell which factor combination will be sent to the intercept
-          # Let's set it to the (approximate) median
-
-          i <- 0
-          reference_lookup <- list()
-          discrete_covar_formula_input <- c()
-          for(var in unique(na.omit(c(discrete_covars, ref_discrete_covars)))){
-            i <- i + 1
-            levels <- sort(ES_data[, unique(get(var))])
-            median_pre_value <- levels[round(length(levels)/2)] # approximate median
-            reference_lookup[[i]] <- data.table(varname = var, reference_level = as.character(median_pre_value))
-
-            discrete_covar_formula_input <- c(discrete_covar_formula_input,
-                                              sprintf("relevel(as.factor(%s), ref = '%s')", var, median_pre_value))
-
-            var <- NULL
-            median_pre_value <- NULL
-          }
-          reference_lookup <- rbindlist(reference_lookup, use.names = TRUE)
-
-        } else{
-          discrete_covar_formula_input = NA
-        }
-
-        if((!is.null(cont_covars)) | (!is.null(ref_cont_covars))){
-          cont_covar_formula_input = paste0(unique(na.omit(c(cont_covars, ref_cont_covars))), collapse = "+")
-        } else{
-          cont_covar_formula_input = NA
-        }
-      }
-
-      for (h in intersect((min(ES_data$ref_onset_time):max(ES_data$ref_onset_time)), ref_onset_times)) {
-        for (r in setdiff(min(ES_data[ref_onset_time == h]$ref_event_time):max(ES_data[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
-          var <- sprintf("ref_onset_time%s_catt%s", h, r)
-          ES_data[, (var) := as.integer(ref_onset_time == h & ref_event_time == r & get(onset_time_var) == h)]
-        }
-      }
-
-      new_cols <- setdiff(colnames(ES_data), start_cols)
-      new_cols_used <- gsub("\\-", "lead", new_cols) # "-" wreaks havoc otherwise, syntactically
-      setnames(ES_data, new_cols, new_cols_used)
-
-      # Should now be able to combine all of the above in a natural way
-      felm_formula_input <- paste(new_cols_used, collapse = "+")
-
-      if(ipw == TRUE){
-
-        if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-          ES_data[, pw := pw * get(na.omit(unique(c(reg_weights, ref_reg_weights))))]
-        }
-
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                    data = ES_data, weights = ES_data$pw,
-                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-        )
-
-      } else if(residualize_covariates == TRUE){
-
-        if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-          est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                      data = ES_data, weights = ES_data[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
-                      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-          )
-        } else{
-          est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                      data = ES_data,
-                      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-          )
-        }
-
-      } else{
-
-        felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
-        fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
-
-        if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-          est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
-                      data = ES_data, weights = ES_data[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
-                      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-          )
-        } else{
-          est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
-                      data = ES_data,
-                      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-          )
-        }
-      }
-
-      # Grabbing the estimates and vcov to produce weighted avg SEs
-      # Note: vcov already reflects weights used in estimation
-      catt_coefs <- coef(est)
-
-      if(!(is.null(cluster_vars))){
-        catt_vcov <- est$clustervcv
-      } else{
-        catt_vcov <- est$robustvcv
-      }
-
-      if(!(is.null(cluster_vars))){
-        results <- data.table(rn = rownames(est$beta),
-                              estimate = as.vector(est$beta),
-                              cluster_se = est$cse,
-                              t = est$ctval,
-                              pval = est$cpval,
-                              reg_sample_size = est$N)
-      } else{
-        results <- data.table(rn = rownames(est$beta),
-                              estimate = as.vector(est$beta),
-                              cluster_se = est$rse,
-                              t = est$rtval,
-                              pval = est$rpval,
-                              reg_sample_size = est$N)
-      }
-      est <- NULL
-      gc()
-
-      results[!grepl("ref\\_onset\\_time", rn), e := min_onset_time]
-      results[, rn := gsub("lead", "-", rn)]
-      for (c in min_onset_time:max_onset_time) {
-        results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), e := c]
-        results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_et", c), "et", rn)]
-        results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
-      }
-      results[grepl("et", rn), event_time := as.integer(gsub("et", "", rn))]
-      results[grepl("catt", rn), event_time := as.integer(gsub("catt", "", rn))]
-      results[grepl("et", rn), rn := "event_time"]
-      results[grepl("catt", rn), rn := "catt"]
-      results <- results[rn == "catt"]
-    } else if(cohort_by_cohort == TRUE){
-
-      cohort_spec_regs <- function(cohort){
-
-        print(cohort)
-
-        cohort_dt <- ES_data[ref_onset_time == cohort]
-        gc()
-
-        if(residualize_covariates == FALSE & ipw == FALSE){
-
-          if((!is.null(discrete_covars)) | (!is.null(ref_discrete_covars)) ){
-
-            # For felm(), want to tell which factor combination will be sent to the intercept
-            # Will prefer choosing levels that are present in all cohorts, and then fallback on an available level in the cohort
-
-            list_unique <- function(cohort, var){return(sort(unique(ES_data[ref_onset_time == cohort][[var]])))}
-
-            i <- 0
-            reference_lookup <- list()
-            discrete_covar_formula_input <- c()
-            for(var in unique(na.omit(c(discrete_covars, ref_discrete_covars)))){
-              i <- i + 1
-              unique_val_list <- lapply(ref_onset_times, list_unique, var = var)
-              common_levels <- sort(Reduce(intersect, unique_val_list))
-              if(length(common_levels) > 0){
-                ref_level = common_levels[round(length(common_levels)/2)] # omits the approximate median
-              } else{
-                cohort_specific_levels <- sort(unique(cohort_dt[[var]]))
-                ref_level = cohort_specific_levels[round(length(cohort_specific_levels)/2)]
-              }
-              reference_lookup[[i]] <- data.table(varname = var, reference_level = as.character(ref_level))
-
-              discrete_covar_formula_input <- c(discrete_covar_formula_input,
-                                                sprintf("relevel(as.factor(%s), ref = '%s')", var, ref_level))
-
-              var <- NULL
-              ref_level <- NULL
-            }
-            reference_lookup <- rbindlist(reference_lookup, use.names = TRUE)
-
-          } else{
-            discrete_covar_formula_input = NA
-          }
-
-          if((!is.null(cont_covars)) | (!is.null(ref_cont_covars))){
-            cont_covar_formula_input = paste0(unique(na.omit(c(cont_covars, ref_cont_covars))), collapse = "+")
-          } else{
-            cont_covar_formula_input = NA
-          }
-
-        }
-
-        for (r in setdiff(min(cohort_dt$ref_event_time):max(cohort_dt$ref_event_time), omitted_event_time)) {
-          var <- sprintf("ref_onset_time%s_catt%s", cohort, r)
-          cohort_dt[, (var) := as.integer(ref_event_time == r & get(onset_time_var) == cohort)]
-        }
-
-        new_cols <- setdiff(colnames(cohort_dt), start_cols)
-        new_cols_used <- gsub("\\-", "lead", new_cols) # "-" wreaks havoc otherwise, syntactically
-        setnames(cohort_dt, new_cols, new_cols_used)
-
-        # Should now be able to combine all of the above in a natural way
-        felm_formula_input <- paste(new_cols_used, collapse = "+")
-
-        if(ipw == TRUE){
-
-          if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-            cohort_dt[, pw := pw * get(na.omit(unique(c(reg_weights, ref_reg_weights))))]
-          }
-
-          est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                      data = cohort_dt, weights = cohort_dt$pw,
-                      nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-          )
-
-        } else if(residualize_covariates == TRUE){
-
-          if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-            est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                        data = cohort_dt, weights = cohort_dt[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
-                        nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-            )
-          } else{
-            est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                        data = cohort_dt,
-                        nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-            )
-          }
-
-        } else{
-
-          felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
-          fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
-
-          if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-            est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
-                        data = cohort_dt, weights = cohort_dt[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
-                        nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-            )
-          } else{
-            est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
-                        data = cohort_dt,
-                        nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-            )
-          }
-        }
-
-        cohort_dt <- NULL
-        gc()
-
-        # Grabbing the estimates and vcov to produce weighted avg SEs
-        # Note: vcov already reflects weights used in estimation
-        catt_coefs <- coef(est)
-
-        if(!(is.null(cluster_vars))){
-          catt_vcov <- est$clustervcv
-        } else{
-          catt_vcov <- est$robustvcv
-        }
-
-        if(!(is.null(cluster_vars))){
-          catt_results <- data.table(rn = rownames(est$beta),
-                                estimate = as.vector(est$beta),
-                                cluster_se = est$cse,
-                                t = est$ctval,
-                                pval = est$cpval,
-                                reg_sample_size = est$N)
-        } else{
-          catt_results <- data.table(rn = rownames(est$beta),
-                                estimate = as.vector(est$beta),
-                                cluster_se = est$rse,
-                                t = est$rtval,
-                                pval = est$rpval,
-                                reg_sample_size = est$N)
-        }
-        est <- NULL
-        gc()
-
-        catt_results[!grepl("ref\\_onset\\_time", rn), e := min_onset_time]
-        catt_results[, rn := gsub("lead", "-", rn)]
-        for (c in min_onset_time:max_onset_time) {
-          catt_results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), e := c]
-          catt_results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_et", c), "et", rn)]
-          catt_results[grepl(sprintf("ref\\_onset\\_time%s", c), rn), rn := gsub(sprintf("ref\\_onset\\_time%s\\_catt", c), "catt", rn)]
-        }
-        catt_results[grepl("et", rn), event_time := as.integer(gsub("et", "", rn))]
-        catt_results[grepl("catt", rn), event_time := as.integer(gsub("catt", "", rn))]
-        catt_results[grepl("et", rn), rn := "event_time"]
-        catt_results[grepl("catt", rn), rn := "catt"]
-        catt_results <- catt_results[rn == "catt"]
-
-        catt_output <- list()
-        catt_output[[1]] <- catt_results
-        catt_output[[2]] <- catt_coefs
-        catt_output[[3]] <- catt_vcov
-
-        return(catt_output)
-      }
-
-      all_catt_results <- parallel::mclapply(X = ref_onset_times, FUN = cohort_spec_regs, mc.silent = FALSE, mc.cores = cohort_by_cohort_num_cores, mc.set.seed = TRUE)
-
-      # Now need to unravel 'results' into:
-      # 1) a data.table with the estimates/current SEs
-      # 2) a named vector with just the estimates (catt_coefs-type thing)
-      # 3) a catt_vcov type thing appropriately matching the order of 2) above
-
-      results = list()
-      catt_coefs = c()
-      catt_vcov = list()
-      catt_vcov_dimnames1 = c()
-      catt_vcov_dimnames2 = c()
-
-      for(i in 1:length(all_catt_results)){
-
-        results[[i]] <- all_catt_results[[i]][[1]]
-        catt_coefs <- c(catt_coefs, all_catt_results[[i]][[2]])
-
-        catt_vcov[[i]] <- all_catt_results[[i]][[3]]
-        catt_vcov_dimnames1 <- c(catt_vcov_dimnames1, dimnames(all_catt_results[[i]][[3]])[[1]])
-        catt_vcov_dimnames2 <- c(catt_vcov_dimnames2, dimnames(all_catt_results[[i]][[3]])[[2]])
-
-      }
-
-      results <- rbindlist(results, use.names = TRUE)
-
-      # Note: below just build block diagonal, which assumes independence across cohort-specific estimates
-      # TO DO: estimate covariance
-      catt_vcov <- as.matrix(bdiag(catt_vcov))
-      dimnames(catt_vcov)[[1]] <- catt_vcov_dimnames1
-      dimnames(catt_vcov)[[2]] <- catt_vcov_dimnames2
-
-    }
-
-  } else {
-
-    if(residualize_covariates == FALSE & ipw == FALSE){
-
-      if((!is.null(discrete_covars)) | (!is.null(ref_discrete_covars)) ){
-
-        # For felm(), want to tell which factor combination will be sent to the intercept
-        # Let's set it to the (approximate) median
-
-        i <- 0
-        reference_lookup <- list()
-        discrete_covar_formula_input <- c()
-        for(var in unique(na.omit(c(discrete_covars, ref_discrete_covars)))){
-          i <- i + 1
-          levels <- sort(ES_data[, unique(get(var))])
-          median_pre_value <- levels[round(length(levels)/2)] # approximate median
-          reference_lookup[[i]] <- data.table(varname = var, reference_level = as.character(median_pre_value))
-
-          discrete_covar_formula_input <- c(discrete_covar_formula_input,
-                                            sprintf("relevel(as.factor(%s), ref = '%s')", var, median_pre_value))
-
-          var <- NULL
-          median_pre_value <- NULL
-        }
-        reference_lookup <- rbindlist(reference_lookup, use.names = TRUE)
-
-      } else{
-        discrete_covar_formula_input = NA
-      }
-
-      if((!is.null(cont_covars)) | (!is.null(ref_cont_covars))){
-        cont_covar_formula_input = paste0(unique(na.omit(c(cont_covars, ref_cont_covars))), collapse = "+")
-      } else{
-        cont_covar_formula_input = NA
-      }
-
-    }
-
-    for (r in setdiff(min(ES_data$ref_event_time):max(ES_data$ref_event_time), omitted_event_time)) {
-      var <- sprintf("att%s", r)
-      ES_data[, (var) := as.integer(ref_event_time == r & ref_onset_time == get(onset_time_var))]
-    }
-
-    new_cols <- setdiff(colnames(ES_data), start_cols)
-    new_cols_used <- gsub("\\-", "lead", new_cols) # "-" wreaks havoc otherwise, syntactically
-    setnames(ES_data, new_cols, new_cols_used)
-
-    # Should now be able to combine all of the above in a natural way
-    felm_formula_input <- paste(c(new_cols_used), collapse = "+")
-
-    if(ipw == TRUE){
-
-      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-        ES_data[, pw := pw * get(na.omit(unique(c(reg_weights, ref_reg_weights))))]
-      }
-
-      est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                  data = ES_data, weights = ES_data$pw,
-                  nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-      )
-
-    } else if(residualize_covariates == TRUE){
-
-      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                    data = ES_data, weights = ES_data[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
-                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-        )
-      } else{
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | unit_sample + ref_onset_ref_event_time | 0 | ",  cluster_on_this)),
-                    data = ES_data,
-                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-        )
-      }
-
-    } else{
-
-      felm_formula_input = paste(na.omit(c(felm_formula_input, cont_covar_formula_input)), collapse = " + ")
-      fe_formula = paste(na.omit(c("unit_sample + ref_onset_ref_event_time", discrete_covar_formula_input)), collapse = " + ")
-
-      if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
-                    data = ES_data, weights = ES_data[[na.omit(unique(c(reg_weights, ref_reg_weights)))]],
-                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-        )
-      } else{
-        est <- felm(as.formula(paste0(eval(outcomevar), " ~ ", felm_formula_input, " | ", fe_formula," | 0 | ",  cluster_on_this)),
-                    data = ES_data,
-                    nostats = FALSE, keepX = FALSE, keepCX = FALSE, psdef = FALSE, kclass = FALSE
-        )
-      }
-
-    }
-
-    # Don't need to grab the estimates and vcov for this homogeneous case, so just do NAs for symmetry
-    catt_coefs <- NA
-    catt_vcov <- NA
-
-    if(!(is.null(cluster_vars))){
-      results <- data.table(rn = rownames(est$beta),
-                            estimate = as.vector(est$beta),
-                            cluster_se = est$cse,
-                            t = est$ctval,
-                            pval = est$cpval,
-                            reg_sample_size = est$N)
-    } else{
-      results <- data.table(rn = rownames(est$beta),
-                            estimate = as.vector(est$beta),
-                            cluster_se = est$rse,
-                            t = est$rtval,
-                            pval = est$rpval,
-                            reg_sample_size = est$N)
-    }
-    est <- NULL
-    gc()
-
-    results <- results[grep("att", rn)]
-    results[grep("lead", rn), rn := gsub("lead", "-", rn)]
-    results[, e := "Pooled"]
-    results[, event_time := as.integer(gsub("att", "", rn))]
-    results[, rn := "att"]
-  }
-
-  setnames(results, c("e"), onset_time_var)
-  results[, pval := round(pval,8)]
-
-  if(homogeneous_ATT == FALSE & ipw == TRUE){
-    flog.info("Estimated heterogeneous case with WLS using IPW.")
-  } else if(homogeneous_ATT == FALSE & ipw == FALSE & is.null(reg_weights) & is.null(ref_reg_weights)){
-    flog.info("Estimated heterogeneous case with OLS.")
-  } else if(homogeneous_ATT == FALSE & ipw == FALSE & (!(is.null(reg_weights)) | !(is.null(ref_reg_weights)))){
-    flog.info("Estimated heterogeneous case with WLS.")
-  } else if(homogeneous_ATT == TRUE & ipw == TRUE){
-    flog.info("Estimated homogeneous case with WLS using IPW.")
-  } else if(homogeneous_ATT == TRUE & ipw == FALSE & is.null(reg_weights) & is.null(ref_reg_weights)){
-    flog.info("Estimated homogeneous case with OLS.")
-  } else{
-    flog.info("Estimated homogeneous case with WLS.")
-  }
-
-  output = list()
-  output[[1]] <- results
-  output[[2]] <- catt_coefs
-  output[[3]] <- catt_vcov
-
-  return(output)
 }
