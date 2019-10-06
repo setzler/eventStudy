@@ -20,6 +20,47 @@ my_dt <- readRDS("~/Downloads/old_downloads/ES_testing/testdt.rds")
 my_dt[, keep_case := between(age, 21, 64, incbounds = TRUE)]
 
 # ###
+# # TESTING THAT vanilla event study gives same estimates for ES and by_cohort_ES
+# ###
+
+collapse_table <- data.table(a = c("pre","on_impact", "post_avg"),b = c(list(-7:-1), list(1), list(1:5)))
+
+# vanilla run
+set.seed(1)
+res0a <- ES(
+  long_data = copy(my_dt),
+  outcomevar = "db_w2_wages",
+  unit_var = "tin",
+  cluster_vars = "tin",
+  cal_time_var = "tax_yr",
+  onset_time_var = "win_yr",
+  omitted_event_time = -2,
+  homogeneous_ATT = FALSE,
+  treated_subset_var = "keep_case",
+  treated_subset_event_time = 0,
+  control_subset_var = "keep_case",
+  control_subset_event_time = 0,
+  calculate_collapse_estimates = TRUE,
+  collapse_inputs = copy(collapse_table))
+
+res0b <- by_cohort_ES(
+  long_data = copy(my_dt),
+  outcomevar = "db_w2_wages",
+  unit_var = "tin",
+  cluster_vars = "tin",
+  cal_time_var = "tax_yr",
+  onset_time_var = "win_yr",
+  omitted_event_time = -2,
+  homogeneous_ATT = FALSE,
+  treated_subset_var = "keep_case",
+  treated_subset_event_time = 0,
+  control_subset_var = "keep_case",
+  control_subset_event_time = 0,
+  calculate_collapse_estimates = TRUE,
+  collapse_inputs = copy(collapse_table), cohor)
+rm(collapse_table)
+
+# ###
 # # TESTING THAT new ES_check_inputs() works correctly
 # ###
 

@@ -55,7 +55,9 @@ ES_check_inputs <-
            ntile_avg = FALSE,
            endog_var = NULL,
            linearDiD = FALSE,
-           linearDiD_treat_var = NULL) {
+           linearDiD_treat_var = NULL,
+           cohort_by_cohort = FALSE,
+           cohort_by_cohort_num_cores = 1) {
 
     # type checks
     assertDataTable(long_data)
@@ -156,6 +158,8 @@ ES_check_inputs <-
         )
       )
     }
+    assertFlag(cohort_by_cohort)
+    assertIntegerish(cohort_by_cohort_num_cores,len=1,lower=1)
 
     # check that anticipation choice and omitted_event_time choice don't conflict
     if (omitted_event_time + anticipation > -1) {
@@ -508,17 +512,20 @@ ES_check_inputs <-
       )
     }
 
-    # warning if supplied bootstrap_num_cores exceeds detectCores() - 1
+    # warning if supplied bootstrap_num_cores*cohort_by_cohort_num_cores exceeds detectCores() - 1
     # not a perfect test (even as an upper bound) as results of detectCores() may be OS-dependent, may not respect cluster allocation limits, etc.
     # see help for detectCores() and mc.cores() for more information
-    if (bootstrap_num_cores > 1) {
-      if (bootstrap_num_cores > (parallel::detectCores() - 1)) {
-        warning(
-          sprintf(
-            "Supplied bootstrap_num_cores='%s'; this exceeds typical system limits and may cause issues.",
-            bootstrap_num_cores
-          )
-        )
+    if(bootstrap_num_cores > 1 & cohort_by_cohort_num_cores == 1){
+      if(bootstrap_num_cores > (parallel::detectCores() - 1)){
+        warning(sprintf("Supplied bootstrap_num_cores='%s'; this exceeds typical system limits and may cause issues.", bootstrap_num_cores))
+      }
+    } else if(bootstrap_num_cores == 1 & cohort_by_cohort_num_cores > 1){
+      if(cohort_by_cohort_num_cores > (parallel::detectCores() - 1)){
+        warning(sprintf("Supplied cohort_by_cohort_num_cores='%s'; this exceeds typical system limits and may cause issues.", cohort_by_cohort_num_cores))
+      }
+    } else if(bootstrap_num_cores > 1 & cohort_by_cohort_num_cores > 1){
+      if(as.integer(bootstrap_num_cores*cohort_by_cohort_num_cores) > (parallel::detectCores() - 1)){
+        warning(sprintf("Supplied bootstrap_num_cores='%s' & cohort_by_cohort_num_cores='%s'; the product (%s) exceeds typical system limits and may cause issues.", bootstrap_num_cores, cohort_by_cohort_num_cores, as.integer(bootstrap_num_cores*cohort_by_cohort_num_cores)))
       }
     }
 
