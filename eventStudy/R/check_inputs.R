@@ -175,6 +175,7 @@ ES_check_inputs <-
     }
 
     # check that all of these variables are actually in the data.table, and provide custom error messages.
+    # also check that the variable types within long_data are appropriate for the program
     if (!(outcomevar %in% names(long_data))) {
       stop(
         sprintf(
@@ -197,10 +198,28 @@ ES_check_inputs <-
         )
       )
     }
+    if (!(long_data[, typeof(get(cal_time_var))] == "integer")) {
+      # we need this as we will take max/min of these when constructing the stacked data in ES_clean_data()
+      stop(
+        sprintf(
+          "Variable cal_time_var='%s' must be of type 'integer' in long_data.",
+          cal_time_var
+        )
+      )
+    }
     if (!(onset_time_var %in% names(long_data))) {
       stop(
         sprintf(
           "Variable onset_time_var='%s' is not in the long_data you provided.",
+          onset_time_var
+        )
+      )
+    }
+    if (!(long_data[, typeof(get(onset_time_var))] == "integer")) {
+      # we need this as we will take max/min of these when constructing the stacked data in ES_clean_data()
+      stop(
+        sprintf(
+          "Variable onset_time_var='%s' must be of type 'integer' in long_data.",
           onset_time_var
         )
       )
@@ -230,7 +249,7 @@ ES_check_inputs <-
       if (!(long_data[, typeof(get(control_subset_var))] == "logical")) {
         stop(
           sprintf(
-            "Variable control_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",
+            "Variable control_subset_var='%s' must be of type 'logical' in long_data (i.e., only TRUE or FALSE values).",
             control_subset_var
           )
         )
@@ -248,7 +267,7 @@ ES_check_inputs <-
       if (!(long_data[, typeof(get(treated_subset_var))] == "logical")) {
         stop(
           sprintf(
-            "Variable treated_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",
+            "Variable treated_subset_var='%s' must be of type 'logical' in long_data (i.e., only TRUE or FALSE values).",
             treated_subset_var
           )
         )
@@ -266,7 +285,7 @@ ES_check_inputs <-
       if (!(long_data[, typeof(get(control_subset_var2))] == "logical")) {
         stop(
           sprintf(
-            "Variable control_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",
+            "Variable control_subset_var2='%s' must be of type 'logical' in long_data (i.e., only TRUE or FALSE values).",
             control_subset_var2
           )
         )
@@ -284,7 +303,7 @@ ES_check_inputs <-
       if (!(long_data[, typeof(get(treated_subset_var2))] == "logical")) {
         stop(
           sprintf(
-            "Variable treated_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",
+            "Variable treated_subset_var2='%s' must be of type 'logical' in long_data (i.e., only TRUE or FALSE values).",
             treated_subset_var2
           )
         )
@@ -380,25 +399,6 @@ ES_check_inputs <-
           )
         }
       }
-    }
-
-    # check that cal_time_var and onset_time_var are both integer
-    # we need this as we will take max/min of these when constructing the stacked data in ES_clean_data()
-    if((class(long_data[[cal_time_var]]) != "integer")){
-      stop(
-        sprintf(
-          "Variable cal_time_var='%s' in long_data is not of type integer. Please change it to type integer.",
-          cal_time_var
-        )
-      )
-    }
-    if((class(long_data[[onset_time_var]]) != "integer")){
-      stop(
-        sprintf(
-          "Variable onset_time_var='%s' in long_data is not of type integer. Please change it to type integer.",
-          onset_time_var
-        )
-      )
     }
 
     # temporary check -- code is currently not set up to accept ntile_event_time != omitted_event_time
