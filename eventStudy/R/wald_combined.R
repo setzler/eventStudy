@@ -15,237 +15,32 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
                calculate_collapse_estimates = FALSE, collapse_inputs = NULL,
                ref_reg_weights = NULL, ref_reg_weights_event_time=0,
                ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
-               endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
+               endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1,
+               heterogeneous_only = TRUE){
 
   flog.info("Beginning Wald_ES.")
 
-  # type checks
-  assertDataTable(long_data)
-  assertCharacter(outcomevar,len=1)
-  assertCharacter(unit_var,len=1)
-  assertCharacter(cal_time_var,len=1)
-  if(!is.null(cluster_vars)){assertCharacter(cluster_vars)}
-  assertIntegerish(omitted_event_time,len=1,upper=-1)
-  assertIntegerish(anticipation,len=1,lower=0)
-  assertIntegerish(min_control_gap,len=1,lower=1)
-  if(!any(testIntegerish(max_control_gap,len=1,lower=min_control_gap),is.infinite(max_control_gap))){
-    assertIntegerish(max_control_gap,len=1,lower=min_control_gap)
-  }
-  if(!any(testIntegerish(max_control_gap,len=1,lower=min_control_gap),is.infinite(max_control_gap))){
-    assertIntegerish(max_control_gap,len=1,lower=min_control_gap)
-  }
-  if(!is.na(control_subset_var)){
-    assertCharacter(control_subset_var,len=1)
-  }
-  if(!is.na(treated_subset_var)){
-    assertCharacter(treated_subset_var,len=1)
-  }
-  if(!is.na(control_subset_var2)){
-    assertCharacter(control_subset_var2,len=1)
-  }
-  if(!is.na(treated_subset_var2)){
-    assertCharacter(treated_subset_var2,len=1)
-  }
-  if(!is.null(reg_weights)){
-    assertCharacter(reg_weights,len=1)
-  }
-  if(!is.null(ref_reg_weights)){
-    assertCharacter(ref_reg_weights,len=1)
-  }
-  assertIntegerish(control_subset_event_time,len=1)
-  assertIntegerish(treated_subset_event_time,len=1)
-  assertIntegerish(control_subset_event_time2,len=1)
-  assertIntegerish(treated_subset_event_time2,len=1)
-  assertIntegerish(ref_discrete_covar_event_time,len=1)
-  assertIntegerish(ref_cont_covar_event_time,len=1)
-  assertIntegerish(ref_reg_weights_event_time,len=1)
-  assertFlag(linearize_pretrends)
-  assertFlag(fill_zeros)
-  assertFlag(residualize_covariates)
-  if(residualize_covariates == TRUE){
-    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars))){
-      stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
-    }
-  }
-  assertFlag(homogeneous_ATT)
-  assertFlag(add_unit_fes)
-  assertFlag(bootstrapES)
-  assertIntegerish(bootstrap_iters,len=1,lower=1)
-  assertIntegerish(bootstrap_num_cores,len=1,lower=1)
-  assertFlag(keep_all_bootstrap_results)
-  assertFlag(ipw)
-  assertFlag(ipw_composition_change)
-  assertNumber(ipw_ps_lower_bound,lower=0,upper=1)
-  assertNumber(ipw_ps_upper_bound,lower=0,upper=1)
-  if(ipw == TRUE){
-    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars), testCharacter(ref_discrete_covars), testCharacter(ref_cont_covars))){
-      stop("Since ipw=TRUE, either discrete_covars, cont_covars, ref_discrete_covars, or ref_cont_covars must be provided as a character vector.")
-    }
-  }
-  assertFlag(calculate_collapse_estimates)
-  if(calculate_collapse_estimates == TRUE){
-    assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
-  }
-  if(!is.null(ntile_var)){
-    assertIntegerish(ntile_event_time,len=1)
-    assertIntegerish(ntiles,len=1,lower=2)
-    assertIntegerish(ntile_var_value,len=1,lower=1,upper=ntiles)
-    assertFlag(ntile_avg)
-  }
-  if(!is.null(endog_var)){
-    assertCharacter(endog_var,len=1)
-  }
-  assertFlag(cohort_by_cohort)
-  assertIntegerish(cohort_by_cohort_num_cores,len=1,lower=1)
-
-  # check that anticipation choice and omitted_event_time choice don't conflict
-  if(omitted_event_time + anticipation > -1){
-    stop(sprintf("omitted_event_time='%s' and anticipation='%s' implies overlap of pre-treatment and anticipation periods. Let me suggest omitted_event_time<='%s'",
-                 omitted_event_time, anticipation, ((-1 * anticipation) - 1)))
-  }
-
-  # check that all of these variables are actually in the data.table, and provide custom error messages.
-  if(!(outcomevar %in% names(long_data))){stop(sprintf("Variable outcomevar='%s' is not in the long_data you provided.",outcomevar))}
-  if(!(unit_var %in% names(long_data))){stop(sprintf("Variable unit_var='%s' is not in the long_data you provided.",unit_var))}
-  if(!(cal_time_var %in% names(long_data))){stop(sprintf("Variable cal_time_var='%s' is not in the long_data you provided.",cal_time_var))}
-  if(!(onset_time_var %in% names(long_data))){stop(sprintf("Variable onset_time_var='%s' is not in the long_data you provided.",onset_time_var))}
-  if(!is.null(cluster_vars)){
-    for(vv in cluster_vars){
-      if(!(vv %in% names(long_data))){stop(sprintf("Variable cluster_vars='%s' is not in the long_data you provided. Let me suggest cluster_vars='%s'.",vv,unit_var))}
-    }
-  }
-  if(!is.na(control_subset_var)){
-    if(!(control_subset_var %in% names(long_data))){stop(sprintf("Variable control_subset_var='%s' is not in the long_data you provided.",control_subset_var))}
-    if(!(long_data[,typeof(get(control_subset_var))]=="logical")){stop(sprintf("Variable control_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var))}
-  }
-  if(!is.na(treated_subset_var)){
-    if(!(treated_subset_var %in% names(long_data))){stop(sprintf("Variable treated_subset_var='%s' is not in the long_data you provided.",treated_subset_var))}
-    if(!(long_data[,typeof(get(treated_subset_var))]=="logical")){stop(sprintf("Variable treated_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var))}
-  }
-  if(!is.na(control_subset_var2)){
-    if(!(control_subset_var2 %in% names(long_data))){stop(sprintf("Variable control_subset_var2='%s' is not in the long_data you provided.",control_subset_var2))}
-    if(!(long_data[,typeof(get(control_subset_var2))]=="logical")){stop(sprintf("Variable control_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var2))}
-  }
-  if(!is.na(treated_subset_var2)){
-    if(!(treated_subset_var2 %in% names(long_data))){stop(sprintf("Variable treated_subset_var2='%s' is not in the long_data you provided.",treated_subset_var2))}
-    if(!(long_data[,typeof(get(treated_subset_var2))]=="logical")){stop(sprintf("Variable treated_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var2))}
-  }
-  if(testCharacter(discrete_covars)){
-    for(vv in discrete_covars){
-      if(!(vv %in% names(long_data))){stop(sprintf("Variable discrete_covars='%s' is not in the long_data you provided.",vv))}
-    }
-  }
-  if(testCharacter(cont_covars)){
-    for(vv in cont_covars){
-      if(!(vv %in% names(long_data))){stop(sprintf("Variable cont_covars='%s' is not in the long_data you provided.",vv))}
-    }
-  }
-  if(testCharacter(ref_discrete_covars)){
-    for(vv in ref_discrete_covars){
-      if(!(vv %in% names(long_data))){stop(sprintf("Variable ref_discrete_covars='%s' is not in the long_data you provided.",vv))}
-    }
-  }
-  if(testCharacter(ref_cont_covars)){
-    for(vv in ref_cont_covars){
-      if(!(vv %in% names(long_data))){stop(sprintf("Variable ref_cont_covars='%s' is not in the long_data you provided.",vv))}
-    }
-  }
-  if(testCharacter(reg_weights)){
-    if(!(reg_weights %in% names(long_data))){stop(sprintf("Variable reg_weights='%s' is not in the long_data you provided.",reg_weights))}
-  }
-  if(testCharacter(ref_reg_weights)){
-    if(!(ref_reg_weights %in% names(long_data))){stop(sprintf("Variable ref_reg_weights='%s' is not in the long_data you provided.",ref_reg_weights))}
-  }
-  if(testCharacter(ntile_var)){
-    if(!(ntile_var %in% names(long_data))){stop(sprintf("Variable ntile_var='%s' is not in the long_data you provided.",ntile_var))}
-  }
-  if(testCharacter(endog_var)){
-    if(!(endog_var %in% names(long_data))){stop(sprintf("Variable endog_var='%s' is not in the long_data you provided.",endog_var))}
-  }
-
-  # temporary check -- code is currently not set up to accept ntile_event_time != omitted_event_time
-  # only bites in the case where !is.null(ntile_var) and omitted_event_time != ntile_event_time
-  if((!is.null(ntile_var)) & omitted_event_time != ntile_event_time){
-    stop(sprintf("ntile_event_time='%s', but currently code can only accept ntile_event_time == omitted_event_time (e.g., %s).", ntile_event_time, omitted_event_time))
-  }
-
-  # check that calculate_collapse_estimates == TRUE only if homogeneous_ATT == FALSE
-  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE){
-    stop("Cannot have calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE. Consider setting homogeneous_ATT = FALSE.")
-  }
-
-  # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var or unit_var)
-  if(add_unit_fes == TRUE){
-    design_vars <- c(cal_time_var, unit_var)
-  } else{
-    design_vars <- c(cal_time_var, onset_time_var)
-  }
-  if(testCharacter(discrete_covars)){
-    for(vv in discrete_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
-    }
-  }
-  if(testCharacter(cont_covars)){
-    for(vv in cont_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
-    }
-  }
-  if(testCharacter(ref_discrete_covars)){
-    for(vv in ref_discrete_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable ref_discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
-    }
-  }
-  if(testCharacter(ref_cont_covars)){
-    for(vv in ref_cont_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable ref_cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
-    }
-  }
-
-  # check that user only supplied one of reg_weights / ref_reg_weights, but not both
-  if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
-    stop("Supplied variables for both reg_weights and ref_reg_weights, but Wald_ES() only admits using one or the other type of weight (or neither).")
-  }
-
-  # check that user correctly input what to do with never treated
-  if(!(never_treat_action %in% c('none', 'exclude', 'keep', 'only'))){
-    stop(sprintf("never_treat_action='%s' is not among allowed values (c('none', 'exclude', 'keep', 'only')).", never_treat_action))
-  }
-  if(never_treat_action=='none' & dim(long_data[is.na(get(onset_time_var))])[1] > 0){
-    stop(sprintf("never_treat_action='%s' but some units have %s=NA. Please edit supplied long_data or consider another option for never_treat_action.", never_treat_action, onset_time_var))
-  }
-  if(never_treat_action!='none' & dim(long_data[is.na(get(onset_time_var))])[1] == 0){
-    stop(sprintf("never_treat_action='%s' but no units have %s=NA. Let me suggest never_treat_action='none'.", never_treat_action, onset_time_var))
-  }
-
-  # warning if cluster_vars = NULL
-  if(is.null(cluster_vars)){warning(sprintf("Supplied cluster_vars = NULL; given stacking in Wald_ES(), standard errors may be too small. Consider cluster_vars='%s' instead.", unit_var))}
-
-  # warning if supplied bootstrap_num_cores*cohort_by_cohort_num_cores exceeds detectCores() - 1
-  # not a perfect test (even as an upper bound) as results of detectCores() may be OS-dependent, may not respect cluster allocation limits, etc.
-  # see help for detectCores() and mc.cores() for more information
-  if(bootstrap_num_cores > 1 & cohort_by_cohort_num_cores == 1){
-    if(bootstrap_num_cores > (parallel::detectCores() - 1)){
-      warning(sprintf("Supplied bootstrap_num_cores='%s'; this exceeds typical system limits and may cause issues.", bootstrap_num_cores))
-    }
-  } else if(bootstrap_num_cores == 1 & cohort_by_cohort_num_cores > 1){
-    if(cohort_by_cohort_num_cores > (parallel::detectCores() - 1)){
-      warning(sprintf("Supplied cohort_by_cohort_num_cores='%s'; this exceeds typical system limits and may cause issues.", cohort_by_cohort_num_cores))
-    }
-  } else if(bootstrap_num_cores > 1 & cohort_by_cohort_num_cores > 1){
-    if(as.integer(bootstrap_num_cores*cohort_by_cohort_num_cores) > (parallel::detectCores() - 1)){
-      warning(sprintf("Supplied bootstrap_num_cores='%s' & cohort_by_cohort_num_cores='%s'; the product (%s) exceeds typical system limits and may cause issues.", bootstrap_num_cores, cohort_by_cohort_num_cores, as.integer(bootstrap_num_cores*cohort_by_cohort_num_cores)))
-    }
-  }
-
-  # check that ipw model conforms to available options, and that propensity score cutoffs are sensible
-  if(ipw == TRUE){
-    if(!(ipw_model %in% c('linear', 'logit', 'probit'))){
-      stop(sprintf("ipw_model='%s' is not among allowed values (c('linear', 'logit', 'probit')).", ipw_model))
-    }
-  }
-  if(ipw_ps_lower_bound > ipw_ps_upper_bound){
-    stop(sprintf("ipw_ps_lower_bound='%s' & ipw_ps_upper_bound='%s', which means ipw_ps_lower_bound > ipw_ps_upper_bound. Consider revising these cutoffs.", ipw_ps_lower_bound, ipw_ps_upper_bound))
-  }
+  # run all preliminary checks
+  # TO-DO: all arguments of ES_check_inputs() match ES() inputs, so would be nicer to just pass them all to ES_check_inputs in a less manual way
+  ES_check_inputs(long_data = long_data, outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var, cluster_vars = cluster_vars,
+                  omitted_event_time = omitted_event_time, anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap,
+                  linearize_pretrends = linearize_pretrends, fill_zeros = fill_zeros, residualize_covariates = residualize_covariates,
+                  control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
+                  treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
+                  control_subset_var2 = control_subset_var2, control_subset_event_time2 = control_subset_event_time2,
+                  treated_subset_var2 = treated_subset_var2, treated_subset_event_time2 = treated_subset_event_time2,
+                  discrete_covars = discrete_covars, cont_covars = cont_covars, never_treat_action = never_treat_action,
+                  homogeneous_ATT = homogeneous_ATT, reg_weights = reg_weights, add_unit_fes = add_unit_fes,
+                  bootstrapES = bootstrapES, bootstrap_iters = bootstrap_iters, bootstrap_num_cores = bootstrap_num_cores, keep_all_bootstrap_results,
+                  ipw = ipw, ipw_model = ipw_model, ipw_composition_change = ipw_composition_change, ipw_keep_data = ipw_keep_data, ipw_ps_lower_bound = ipw_ps_lower_bound, ipw_ps_upper_bound = ipw_ps_upper_bound,
+                  event_vs_noevent = event_vs_noevent,
+                  ref_discrete_covars = ref_discrete_covars, ref_discrete_covar_event_time = ref_discrete_covar_event_time,
+                  ref_cont_covars = ref_cont_covars, ref_cont_covar_event_time = ref_cont_covar_event_time,
+                  calculate_collapse_estimates = calculate_collapse_estimates, collapse_inputs = collapse_inputs,
+                  ref_reg_weights = ref_reg_weights, ref_reg_weights_event_time = ref_reg_weights_event_time,
+                  ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
+                  endog_var = endog_var, cohort_by_cohort = cohort_by_cohort, cohort_by_cohort_num_cores = cohort_by_cohort_num_cores,
+                  heterogeneous_only = heterogeneous_only)
 
   # if user will be producing bootstrap SEs, want to preserve a copy of the data as it is now;
   # otherwise, potential for changes to underlying sample in subsequent steps
@@ -354,34 +149,49 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
         varname <- sprintf("%s_dyn", var)
 
-        # For a variable that is a character, will need to generate a numeric
-        # Note: if there are missings, this will assign them all to a single level
+        # For a variable that is a character, will need to generate an integer
+        # Note: if there are missings, .GRP will assign them all to a single level, so need to turn to them back NAs
         if(class(ES_data[[var]]) == "character"){
+          ES_data[, sortorder := .I]
           ES_data[, (varname) := .GRP, keyby = var]
+          ES_data[(is.na(get(var)) | get(var) == ""), (varname) := NA]
+          setorderv(ES_data, "sortorder")
+          ES_data[, sortorder := NULL]
         } else{
           ES_data[, (varname) := get(var)]
         }
-
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
 
       } else{
 
         varname <- var
 
         # For a variable that is a character, will need to generate a numeric
+        # Note: if there are missings, .GRP will assign them all to a single level, so need to turn to them back NAs
         if(class(ES_data[[var]]) == "character"){
-          ES_data[, varnum := .GRP, keyby = var]
+          ES_data[, sortorder := .I]
+          ES_data[, tempvar := .GRP, keyby = var]
+          ES_data[(is.na(get(var)) | get(var) == ""), tempvar := NA]
           ES_data[, (varname) := NULL]
-          setnames(ES_data, "varnum", varname)
+          setnames(ES_data, "tempvar", varname)
           # ^need to do it this way because (varname) is character and redefining and assigning in one step is a pain
+          setorderv(ES_data, "sortorder")
+          ES_data[, sortorder := NULL]
         }
 
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+      }
 
+      # Define the time-invariant outcome for all units within a ref_onset_time
+      # 1) use sum2() instead of max2() in case 'varname' takes on negative values (as max2() would then return 0)
+      # 2) if ref_discrete_covar_event_time == omitted_event_time, we need to do sum2() by by=c(unit_var, "ref_onset_time", "catt_specific_sample")
+      # ==> otherwise, end up summing undesirably over the repeated rows (as omitted_event_time rows are reused many times)
+      # 3) replace values of non-target ref_event_time with NA
+      # ==> this ensures that when we sum2() with a by(), we either return the value from the desired ref_event_time or NA
+      # ==> otherwise, in case where varname is NA in desired ref_event_time, but not NA at some other times, sum2() would return 0
+      ES_data[ref_event_time != ref_discrete_covar_event_time, (varname) := NA]
+      if(ref_discrete_covar_event_time == omitted_event_time){
+        ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_discrete_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
+      } else{
+        ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_discrete_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
       }
 
     }
@@ -389,7 +199,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
     # If any columns were generated above, we can add them to ref_discrete_covars
     # When these are used later in estimation, the loop is over unique values in the intersection of discrete_covars and ref_discrete_covars
     ref_discrete_covars <- unique(na.omit(c(ref_discrete_covars, setdiff(colnames(ES_data), start_cols))))
-    rm(start_cols)
+    rm(start_cols, var, varname)
   }
 
   # construct continuous covariates specific to a ref_event_time
@@ -406,28 +216,32 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
       # If, for some reason, there is overlap (in variable name) between cont_covars and ref_cont_covars, want to make sure not to overwrite
       if(var %in% cont_covars){
-
         varname <- sprintf("%s_dyn", var)
+        ES_data[, (varname) := get(var)]
+      } else{
+        varname <- var
+      }
 
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        if(class(ES_data[[var]]) == "integer"){
-          # needed to include type checks as sum() often converts from integer to numeric
-          # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+      # Define the time-invariant outcome for all units within a ref_onset_time
+      # 1) use sum2() instead of max2() in case 'varname' takes on negative values (as max2() would then return 0)
+      # 2) if ref_cont_covar_event_time == omitted_event_time, we need to do sum2() by by=c(unit_var, "ref_onset_time", "catt_specific_sample")
+      # ==> otherwise, end up summing undesirably over the repeated rows (as omitted_event_time rows are reused many times)
+      # 3) replace values of non-target ref_event_time with NA
+      # ==> this ensures that when we sum2() with a by(), we either return the value from the desired ref_event_time or NA
+      # ==> otherwise, in case where varname is NA in desired ref_event_time, but not NA at some other times, sum2() would return 0
+      ES_data[ref_event_time != ref_cont_covar_event_time, (varname) := NA]
+      if(class(ES_data[[var]]) == "integer"){
+        if(ref_cont_covar_event_time == omitted_event_time){
+          ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
         } else{
-          ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
         }
       } else{
-
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        if(class(ES_data[[var]]) == "integer"){
-          # needed to include type checks as sum() often converts from integer to numeric
-          # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        if(ref_cont_covar_event_time == omitted_event_time){
+          ES_data[, (varname) := as.numeric(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
         } else{
-          ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          ES_data[, (varname) := as.numeric(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
         }
-
       }
 
     }
@@ -451,12 +265,12 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
     # Define the time-invariant outcome for all units within a ref_onset_time
     if(class(ES_data[[ref_reg_weights]]) == "integer"){
+      ES_data[, (ref_reg_weights) := as.numeric(get(ref_reg_weights))]
       # needed to include type checks as sum() often converts from integer to numeric
       # use sum() instead of max() just to parallel earlier code; wouldn't anticipate negative values in a weight variable
-      ES_data[, (ref_reg_weights) := sum(as.integer(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time))), by=c(unit_var, "ref_onset_time")]
-    } else{
-      ES_data[, (ref_reg_weights) := sum(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time)), by=c(unit_var, "ref_onset_time")]
     }
+    ES_data[, (ref_reg_weights) := unique(get(ref_reg_weights)[ref_event_time==ref_reg_weights_event_time], na.rm = TRUE)[1], by=c(unit_var, "ref_onset_time")]
+
 
     # remove any cases with ref_reg_weights <= 0, -Inf, Inf, or NA
     count_ES_initial <- dim(ES_data)[1]
@@ -488,8 +302,10 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
   if(ipw == TRUE){
 
     # Within each DiD sample, estimate weights to balance provided covariates
-    ES_data[, did_id := .GRP, keyby = list(ref_onset_time, catt_specific_sample)]
-    did_ids <- ES_data[, sort(unique(did_id))]
+    ES_data[, sortorder := .I]
+    ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
+    setorderv(ES_data, "sortorder")
+    ES_data[, sortorder := NULL]
 
     if(ipw_composition_change == FALSE){
 
@@ -497,7 +313,7 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
       for(i in did_ids){
 
-        ipw_dt <- ES_make_ipw_dt2(did_dt = copy(ES_data[did_id == i]),
+        ipw_dt <- ES_make_ipw_dt(did_dt = copy(ES_data[did_id == i]),
                                  unit_var = unit_var,
                                  cal_time_var = cal_time_var,
                                  discrete_covars = discrete_covars,
@@ -634,35 +450,11 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
     ES_results_hetero_fs <- NULL
   }
 
-  # reduced form; homogeneous_ATT = TRUE
-  # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
-  ES_results_homo_rf <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
-                                                  outcomevar = outcomevar,
-                                                  unit_var = unit_var,
-                                                  onset_time_var = onset_time_var,
-                                                  cluster_vars = cluster_vars,
-                                                  homogeneous_ATT = TRUE,
-                                                  omitted_event_time = omitted_event_time,
-                                                  discrete_covars = discrete_covars,
-                                                  cont_covars = cont_covars,
-                                                  ref_discrete_covars = ref_discrete_covars,
-                                                  ref_cont_covars = ref_cont_covars,
-                                                  residualize_covariates = residualize_covariates,
-                                                  reg_weights = reg_weights,
-                                                  ref_reg_weights = ref_reg_weights,
-                                                  ipw = ipw,
-                                                  ipw_composition_change = ipw_composition_change,
-                                                  add_unit_fes = add_unit_fes,
-                                                  cohort_by_cohort = cohort_by_cohort,
-                                                  cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
-  gc()
-  setnames(ES_results_homo_rf,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
-
-  if(!is.null(endog_var)){
-    # first_stage; homogeneous_ATT = TRUE
+  if(heterogeneous_only == FALSE){
+    # reduced form; homogeneous_ATT == TRUE
     # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
-    ES_results_homo_fs <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
-                                                    outcomevar = endog_var,
+    ES_results_homo_rf <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
+                                                    outcomevar = outcomevar,
                                                     unit_var = unit_var,
                                                     onset_time_var = onset_time_var,
                                                     cluster_vars = cluster_vars,
@@ -681,8 +473,37 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
                                                     cohort_by_cohort = cohort_by_cohort,
                                                     cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
     gc()
-    setnames(ES_results_homo_fs,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+    setnames(ES_results_homo_rf,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+
+    if(!is.null(endog_var)){
+      # first_stage; homogeneous_ATT == TRUE
+      # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+      ES_results_homo_fs <- by_cohort_ES_estimate_ATT(ES_data = copy(ES_data),
+                                                      outcomevar = endog_var,
+                                                      unit_var = unit_var,
+                                                      onset_time_var = onset_time_var,
+                                                      cluster_vars = cluster_vars,
+                                                      homogeneous_ATT = TRUE,
+                                                      omitted_event_time = omitted_event_time,
+                                                      discrete_covars = discrete_covars,
+                                                      cont_covars = cont_covars,
+                                                      ref_discrete_covars = ref_discrete_covars,
+                                                      ref_cont_covars = ref_cont_covars,
+                                                      residualize_covariates = residualize_covariates,
+                                                      reg_weights = reg_weights,
+                                                      ref_reg_weights = ref_reg_weights,
+                                                      ipw = ipw,
+                                                      ipw_composition_change = ipw_composition_change,
+                                                      add_unit_fes = add_unit_fes,
+                                                      cohort_by_cohort = cohort_by_cohort,
+                                                      cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+      gc()
+      setnames(ES_results_homo_fs,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+    } else{
+      ES_results_homo_fs <- NULL
+    }
   } else{
+    ES_results_homo_rf <- NULL
     ES_results_homo_fs <- NULL
   }
 
@@ -798,6 +619,10 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
   figdata <- rbindlist(list(figdata_rf, figdata_fs), use.names = TRUE, fill = TRUE)
   rm(figdata_rf)
   rm(figdata_fs)
+
+  # rbindlist() to ES_results_homo* would have made ref_onset_time 'character' since ref_onset_time == "Pooled" there, but if heterogeneous_only = TRUE, ES_results_homo_fs = NULL
+  # so manually make this edit here to make minimal edits relative to ES()
+  figdata[, ref_onset_time := as.character(ref_onset_time)]
 
   # merge various *_unique_units into figdata
   # exclude catt_treated_unique_units/catt_total_unique_units as these will be added as part of (un)weighted means below
@@ -1191,7 +1016,8 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
                                                  calculate_collapse_estimates = calculate_collapse_estimates, collapse_inputs = collapse_inputs,
                                                  ref_reg_weights = ref_reg_weights, ref_reg_weights_event_time = ref_reg_weights_event_time,
                                                  ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
-                                                 endog_var = endog_var, cohort_by_cohort = cohort_by_cohort, cohort_by_cohort_num_cores = cohort_by_cohort_num_cores),
+                                                 endog_var = endog_var, cohort_by_cohort = cohort_by_cohort, cohort_by_cohort_num_cores = cohort_by_cohort_num_cores,
+                                                 heterogeneous_only = heterogeneous_only),
                               use.names = TRUE
     )
 
@@ -1278,7 +1104,8 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
                               calculate_collapse_estimates = FALSE, collapse_inputs = NULL,
                               ref_reg_weights = NULL, ref_reg_weights_event_time=0,
                               ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
-                              endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1){
+                              endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1,
+                              heterogeneous_only = TRUE){
 
   # Function mirrors Wald_ES(), but with less printing/warning and skipping sections responsible for analytical standard errors and the like which aren't relevant
   # We keep various checks to make sure no issues arise due to a potential strange bootstrap sample draw
@@ -1288,209 +1115,24 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
 
   flog.info(sprintf("Beginning Wald_bootstrap_ES iteration %s.", format(iter, scientific = FALSE, big.mark = ",")))
 
-  # type checks
-  assertDataTable(bs_long_data)
-  assertCharacter(outcomevar,len=1)
-  assertCharacter(unit_var,len=1)
-  assertCharacter(cal_time_var,len=1)
-  if(!is.null(cluster_vars)){assertCharacter(cluster_vars)}
-  assertIntegerish(omitted_event_time,len=1,upper=-1)
-  assertIntegerish(anticipation,len=1,lower=0)
-  assertIntegerish(min_control_gap,len=1,lower=1)
-  if(!any(testIntegerish(max_control_gap,len=1,lower=min_control_gap),is.infinite(max_control_gap))){
-    assertIntegerish(max_control_gap,len=1,lower=min_control_gap)
-  }
-  if(!any(testIntegerish(max_control_gap,len=1,lower=min_control_gap),is.infinite(max_control_gap))){
-    assertIntegerish(max_control_gap,len=1,lower=min_control_gap)
-  }
-  if(!is.na(control_subset_var)){
-    assertCharacter(control_subset_var,len=1)
-  }
-  if(!is.na(treated_subset_var)){
-    assertCharacter(treated_subset_var,len=1)
-  }
-  if(!is.na(control_subset_var2)){
-    assertCharacter(control_subset_var2,len=1)
-  }
-  if(!is.na(treated_subset_var2)){
-    assertCharacter(treated_subset_var2,len=1)
-  }
-  if(!is.null(reg_weights)){
-    assertCharacter(reg_weights,len=1)
-  }
-  if(!is.null(ref_reg_weights)){
-    assertCharacter(ref_reg_weights,len=1)
-  }
-  assertIntegerish(control_subset_event_time,len=1)
-  assertIntegerish(treated_subset_event_time,len=1)
-  assertIntegerish(control_subset_event_time2,len=1)
-  assertIntegerish(treated_subset_event_time2,len=1)
-  assertIntegerish(ref_discrete_covar_event_time,len=1)
-  assertIntegerish(ref_cont_covar_event_time,len=1)
-  assertIntegerish(ref_reg_weights_event_time,len=1)
-  assertFlag(linearize_pretrends)
-  assertFlag(fill_zeros)
-  assertFlag(residualize_covariates)
-  if(residualize_covariates == TRUE){
-    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars))){
-      stop("Since residualize_covariates=TRUE, either discrete_covars or cont_covars must be provided as a character vector.")
-    }
-  }
-  assertFlag(homogeneous_ATT)
-  assertFlag(add_unit_fes)
-  assertFlag(ipw)
-  assertFlag(ipw_composition_change)
-  assertNumber(ipw_ps_lower_bound,lower=0,upper=1)
-  assertNumber(ipw_ps_upper_bound,lower=0,upper=1)
-  if(ipw == TRUE){
-    if(!any(testCharacter(discrete_covars), testCharacter(cont_covars), testCharacter(ref_discrete_covars), testCharacter(ref_cont_covars))){
-      stop("Since ipw=TRUE, either discrete_covars, cont_covars, ref_discrete_covars, or ref_cont_covars must be provided as a character vector.")
-    }
-  }
-  assertFlag(calculate_collapse_estimates)
-  if(calculate_collapse_estimates == TRUE){
-    assertDataTable(collapse_inputs, ncols = 2, any.missing = FALSE, types = c("character", "list"))
-  }
-  if(!is.null(ntile_var)){
-    assertIntegerish(ntile_event_time,len=1)
-    assertIntegerish(ntiles,len=1,lower=2)
-    assertIntegerish(ntile_var_value,len=1,lower=1,upper=ntiles)
-    assertFlag(ntile_avg)
-  }
-  if(!is.null(endog_var)){
-    assertCharacter(endog_var,len=1)
-  }
-  assertFlag(cohort_by_cohort)
-  assertIntegerish(cohort_by_cohort_num_cores,len=1,lower=1)
-
-  # check that anticipation choice and omitted_event_time choice don't conflict
-  if(omitted_event_time + anticipation > -1){
-    stop(sprintf("omitted_event_time='%s' and anticipation='%s' implies overlap of pre-treatment and anticipation periods. Let me suggest omitted_event_time<='%s'",
-                 omitted_event_time, anticipation, ((-1 * anticipation) - 1)))
-  }
-
-  # check that all of these variables are actually in the data.table, and provide custom error messages.
-  if(!(outcomevar %in% names(bs_long_data))){stop(sprintf("Variable outcomevar='%s' is not in the bs_long_data you provided.",outcomevar))}
-  if(!(unit_var %in% names(bs_long_data))){stop(sprintf("Variable unit_var='%s' is not in the bs_long_data you provided.",unit_var))}
-  if(!(cal_time_var %in% names(bs_long_data))){stop(sprintf("Variable cal_time_var='%s' is not in the bs_long_data you provided.",cal_time_var))}
-  if(!(onset_time_var %in% names(bs_long_data))){stop(sprintf("Variable onset_time_var='%s' is not in the bs_long_data you provided.",onset_time_var))}
-  if(!is.null(cluster_vars)){
-    for(vv in cluster_vars){
-      if(!(vv %in% names(bs_long_data))){stop(sprintf("Variable cluster_vars='%s' is not in the bs_long_data you provided. Let me suggest cluster_vars='%s'.",vv,unit_var))}
-    }
-  }
-  if(!is.na(control_subset_var)){
-    if(!(control_subset_var %in% names(bs_long_data))){stop(sprintf("Variable control_subset_var='%s' is not in the bs_long_data you provided.",control_subset_var))}
-    if(!(bs_long_data[,typeof(get(control_subset_var))]=="logical")){stop(sprintf("Variable control_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var))}
-  }
-  if(!is.na(treated_subset_var)){
-    if(!(treated_subset_var %in% names(bs_long_data))){stop(sprintf("Variable treated_subset_var='%s' is not in the bs_long_data you provided.",treated_subset_var))}
-    if(!(bs_long_data[,typeof(get(treated_subset_var))]=="logical")){stop(sprintf("Variable treated_subset_var='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var))}
-  }
-  if(!is.na(control_subset_var2)){
-    if(!(control_subset_var2 %in% names(bs_long_data))){stop(sprintf("Variable control_subset_var2='%s' is not in the bs_long_data you provided.",control_subset_var2))}
-    if(!(bs_long_data[,typeof(get(control_subset_var2))]=="logical")){stop(sprintf("Variable control_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",control_subset_var2))}
-  }
-  if(!is.na(treated_subset_var2)){
-    if(!(treated_subset_var2 %in% names(bs_long_data))){stop(sprintf("Variable treated_subset_var2='%s' is not in the bs_long_data you provided.",treated_subset_var2))}
-    if(!(bs_long_data[,typeof(get(treated_subset_var2))]=="logical")){stop(sprintf("Variable treated_subset_var2='%s' must be of type logical (i.e., only TRUE or FALSE values).",treated_subset_var2))}
-  }
-  if(testCharacter(discrete_covars)){
-    for(vv in discrete_covars){
-      if(!(vv %in% names(bs_long_data))){stop(sprintf("Variable discrete_covars='%s' is not in the bs_long_data you provided.",vv))}
-    }
-  }
-  if(testCharacter(cont_covars)){
-    for(vv in cont_covars){
-      if(!(vv %in% names(bs_long_data))){stop(sprintf("Variable cont_covars='%s' is not in the bs_long_data you provided.",vv))}
-    }
-  }
-  if(testCharacter(ref_discrete_covars)){
-    for(vv in ref_discrete_covars){
-      if(!(vv %in% names(bs_long_data))){stop(sprintf("Variable ref_discrete_covars='%s' is not in the bs_long_data you provided.",vv))}
-    }
-  }
-  if(testCharacter(ref_cont_covars)){
-    for(vv in ref_cont_covars){
-      if(!(vv %in% names(bs_long_data))){stop(sprintf("Variable ref_cont_covars='%s' is not in the bs_long_data you provided.",vv))}
-    }
-  }
-  if(testCharacter(reg_weights)){
-    if(!(reg_weights %in% names(bs_long_data))){stop(sprintf("Variable reg_weights='%s' is not in the bs_long_data you provided.",reg_weights))}
-  }
-  if(testCharacter(ref_reg_weights)){
-    if(!(ref_reg_weights %in% names(bs_long_data))){stop(sprintf("Variable ref_reg_weights='%s' is not in the bs_long_data you provided.",ref_reg_weights))}
-  }
-  if(testCharacter(ntile_var)){
-    if(!(ntile_var %in% names(bs_long_data))){stop(sprintf("Variable ntile_var='%s' is not in the bs_long_data you provided.",ntile_var))}
-  }
-  if(testCharacter(endog_var)){
-    if(!(endog_var %in% names(bs_long_data))){stop(sprintf("Variable endog_var='%s' is not in the bs_long_data you provided.",endog_var))}
-  }
-
-  # temporary check -- code is currently not set up to accept ntile_event_time != omitted_event_time
-  # only bites in the case where !is.null(ntile_var) and omitted_event_time != ntile_event_time
-  if((!is.null(ntile_var)) & omitted_event_time != ntile_event_time){
-    stop(sprintf("ntile_event_time='%s', but currently code can only accept ntile_event_time == omitted_event_time (e.g., %s).", ntile_event_time, omitted_event_time))
-  }
-
-  # check that calculate_collapse_estimates == TRUE only if homogeneous_ATT == FALSE
-  if(calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE){
-    stop("Cannot have calculate_collapse_estimates == TRUE & homogeneous_ATT == TRUE. Consider setting homogeneous_ATT = FALSE.")
-  }
-
-  # check that control variables don't overlap with design variables (e.g., cal_time_var, and onset_time_var or unit_var)
-  if(add_unit_fes == TRUE){
-    design_vars <- c(cal_time_var, unit_var)
-  } else{
-    design_vars <- c(cal_time_var, onset_time_var)
-  }
-  if(testCharacter(discrete_covars)){
-    for(vv in discrete_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
-    }
-  }
-  if(testCharacter(cont_covars)){
-    for(vv in cont_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
-    }
-  }
-  if(testCharacter(ref_discrete_covars)){
-    for(vv in ref_discrete_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable ref_discrete_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
-    }
-  }
-  if(testCharacter(ref_cont_covars)){
-    for(vv in ref_cont_covars){
-      if(vv %in% design_vars){stop(sprintf("Variable ref_cont_covars='%s' is among c('%s','%s') which are already controlled in the design.",vv, design_vars[[1]], design_vars[[2]]))}
-    }
-  }
-
-  # check that user only supplied one of reg_weights / ref_reg_weights, but not both
-  if(!is.null(reg_weights) & !is.null(ref_reg_weights)){
-    stop("Supplied variables for both reg_weights and ref_reg_weights, but Wald_bootstrap_ES() only admits using one or the other type of weight (or neither).")
-  }
-
-  # check that user correctly input what to do with never treated
-  if(!(never_treat_action %in% c('none', 'exclude', 'keep', 'only'))){
-    stop(sprintf("never_treat_action='%s' is not among allowed values (c('none', 'exclude', 'keep', 'only')).", never_treat_action))
-  }
-  if(never_treat_action=='none' & dim(bs_long_data[is.na(get(onset_time_var))])[1] > 0){
-    stop(sprintf("never_treat_action='%s' but some units have %s=NA. Please edit supplied bs_long_data or consider another option for never_treat_action.", never_treat_action, onset_time_var))
-  }
-  if(never_treat_action!='none' & dim(bs_long_data[is.na(get(onset_time_var))])[1] == 0){
-    stop(sprintf("never_treat_action='%s' but no units have %s=NA. Let me suggest never_treat_action='none'.", never_treat_action, onset_time_var))
-  }
-
-  # check that ipw model conforms to available options, and that propensity score cutoffs are sensible
-  if(ipw == TRUE){
-    if(!(ipw_model %in% c('linear', 'logit', 'probit'))){
-      stop(sprintf("ipw_model='%s' is not among allowed values (c('linear', 'logit', 'probit')).", ipw_model))
-    }
-  }
-  if(ipw_ps_lower_bound > ipw_ps_upper_bound){
-    stop(sprintf("ipw_ps_lower_bound='%s' & ipw_ps_upper_bound='%s', which means ipw_ps_lower_bound > ipw_ps_upper_bound. Consider revising these cutoffs.", ipw_ps_lower_bound, ipw_ps_upper_bound))
-  }
+  ES_check_inputs(long_data = bs_long_data, outcomevar = outcomevar, unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var, cluster_vars = cluster_vars,
+                  omitted_event_time = omitted_event_time, anticipation = anticipation, min_control_gap = min_control_gap, max_control_gap = max_control_gap,
+                  linearize_pretrends = linearize_pretrends, fill_zeros = fill_zeros, residualize_covariates = residualize_covariates,
+                  control_subset_var = control_subset_var, control_subset_event_time = control_subset_event_time,
+                  treated_subset_var = treated_subset_var, treated_subset_event_time = treated_subset_event_time,
+                  control_subset_var2 = control_subset_var2, control_subset_event_time2 = control_subset_event_time2,
+                  treated_subset_var2 = treated_subset_var2, treated_subset_event_time2 = treated_subset_event_time2,
+                  discrete_covars = discrete_covars, cont_covars = cont_covars, never_treat_action = never_treat_action,
+                  homogeneous_ATT = homogeneous_ATT, reg_weights = reg_weights, add_unit_fes = add_unit_fes,
+                  ipw = ipw, ipw_model = ipw_model, ipw_composition_change = ipw_composition_change, ipw_keep_data = ipw_keep_data, ipw_ps_lower_bound = ipw_ps_lower_bound, ipw_ps_upper_bound = ipw_ps_upper_bound,
+                  event_vs_noevent = event_vs_noevent,
+                  ref_discrete_covars = ref_discrete_covars, ref_discrete_covar_event_time = ref_discrete_covar_event_time,
+                  ref_cont_covars = ref_cont_covars, ref_cont_covar_event_time = ref_cont_covar_event_time,
+                  calculate_collapse_estimates = calculate_collapse_estimates, collapse_inputs = collapse_inputs,
+                  ref_reg_weights = ref_reg_weights, ref_reg_weights_event_time = ref_reg_weights_event_time,
+                  ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
+                  endog_var = endog_var, cohort_by_cohort = cohort_by_cohort, cohort_by_cohort_num_cores = cohort_by_cohort_num_cores,
+                  heterogeneous_only = heterogeneous_only)
 
   # edit bs_long_data in line with supplied never_treat_action option
   if(never_treat_action == 'exclude'){
@@ -1553,6 +1195,9 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
                               ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
                               endog_var = endog_var)
 
+  bs_long_data <- NULL
+  gc()
+
   # construct discrete covariates specific to a ref_event_time
   # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
 
@@ -1567,34 +1212,49 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
 
         varname <- sprintf("%s_dyn", var)
 
-        # For a variable that is a character, will need to generate a numeric
-        # Note: if there are missings, this will assign them all to a single level
+        # For a variable that is a character, will need to generate an integer
+        # Note: if there are missings, .GRP will assign them all to a single level, so need to turn to them back NAs
         if(class(bs_ES_data[[var]]) == "character"){
+          bs_ES_data[, sortorder := .I]
           bs_ES_data[, (varname) := .GRP, keyby = var]
+          bs_ES_data[(is.na(get(var)) | get(var) == ""), (varname) := NA]
+          setorderv(bs_ES_data, "sortorder")
+          bs_ES_data[, sortorder := NULL]
         } else{
           bs_ES_data[, (varname) := get(var)]
         }
-
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
 
       } else{
 
         varname <- var
 
         # For a variable that is a character, will need to generate a numeric
+        # Note: if there are missings, .GRP will assign them all to a single level, so need to turn to them back NAs
         if(class(bs_ES_data[[var]]) == "character"){
-          bs_ES_data[, varnum := .GRP, keyby = var]
+          bs_ES_data[, sortorder := .I]
+          bs_ES_data[, tempvar := .GRP, keyby = var]
+          bs_ES_data[(is.na(get(var)) | get(var) == ""), tempvar := NA]
           bs_ES_data[, (varname) := NULL]
-          setnames(bs_ES_data, "varnum", varname)
+          setnames(bs_ES_data, "tempvar", varname)
           # ^need to do it this way because (varname) is character and redefining and assigning in one step is a pain
+          setorderv(bs_ES_data, "sortorder")
+          bs_ES_data[, sortorder := NULL]
         }
 
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        # use sum() instead of max() in case 'varname' takes on negative values (as max() would then return 0)
-        bs_ES_data[, (varname) := sum(as.integer(get(varname)*(ref_event_time==ref_discrete_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+      }
 
+      # Define the time-invariant outcome for all units within a ref_onset_time
+      # 1) use sum2() instead of max2() in case 'varname' takes on negative values (as max2() would then return 0)
+      # 2) if ref_discrete_covar_event_time == omitted_event_time, we need to do sum2() by by=c(unit_var, "ref_onset_time", "catt_specific_sample")
+      # ==> otherwise, end up summing undesirably over the repeated rows (as omitted_event_time rows are reused many times)
+      # 3) replace values of non-target ref_event_time with NA
+      # ==> this ensures that when we sum2() with a by(), we either return the value from the desired ref_event_time or NA
+      # ==> otherwise, in case where varname is NA in desired ref_event_time, but not NA at some other times, sum2() would return 0
+      bs_ES_data[ref_event_time != ref_discrete_covar_event_time, (varname) := NA]
+      if(ref_discrete_covar_event_time == omitted_event_time){
+        bs_ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_discrete_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
+      } else{
+        bs_ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_discrete_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
       }
 
     }
@@ -1602,7 +1262,7 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
     # If any columns were generated above, we can add them to ref_discrete_covars
     # When these are used later in estimation, the loop is over unique values in the intersection of discrete_covars and ref_discrete_covars
     ref_discrete_covars <- unique(na.omit(c(ref_discrete_covars, setdiff(colnames(bs_ES_data), start_cols))))
-    rm(start_cols)
+    rm(start_cols, var, varname)
   }
 
   # construct continuous covariates specific to a ref_event_time
@@ -1619,28 +1279,32 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
 
       # If, for some reason, there is overlap (in variable name) between cont_covars and ref_cont_covars, want to make sure not to overwrite
       if(var %in% cont_covars){
-
         varname <- sprintf("%s_dyn", var)
+        bs_ES_data[, (varname) := get(var)]
+      } else{
+        varname <- var
+      }
 
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        if(class(bs_ES_data[[var]]) == "integer"){
-          # needed to include type checks as sum() often converts from integer to numeric
-          # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          bs_ES_data[, (varname) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+      # Define the time-invariant outcome for all units within a ref_onset_time
+      # 1) use sum2() instead of max2() in case 'varname' takes on negative values (as max2() would then return 0)
+      # 2) if ref_cont_covar_event_time == omitted_event_time, we need to do sum2() by by=c(unit_var, "ref_onset_time", "catt_specific_sample")
+      # ==> otherwise, end up summing undesirably over the repeated rows (as omitted_event_time rows are reused many times)
+      # 3) replace values of non-target ref_event_time with NA
+      # ==> this ensures that when we sum2() with a by(), we either return the value from the desired ref_event_time or NA
+      # ==> otherwise, in case where varname is NA in desired ref_event_time, but not NA at some other times, sum2() would return 0
+      bs_ES_data[ref_event_time != ref_cont_covar_event_time, (varname) := NA]
+      if(class(bs_ES_data[[var]]) == "integer"){
+        if(ref_cont_covar_event_time == omitted_event_time){
+          bs_ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
         } else{
-          bs_ES_data[, (varname) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          bs_ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
         }
       } else{
-
-        # Define the time-invariant outcome for all units within a ref_onset_time
-        if(class(bs_ES_data[[var]]) == "integer"){
-          # needed to include type checks as sum() often converts from integer to numeric
-          # use sum() instead of max() in case 'var' takes on negative values (as max() would then return 0)
-          bs_ES_data[, (var) := sum(as.integer(get(var)*(ref_event_time==ref_cont_covar_event_time))), by=c(unit_var, "ref_onset_time")]
+        if(ref_cont_covar_event_time == omitted_event_time){
+          bs_ES_data[, (varname) := as.numeric(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
         } else{
-          bs_ES_data[, (var) := sum(get(var)*(ref_event_time==ref_cont_covar_event_time)), by=c(unit_var, "ref_onset_time")]
+          bs_ES_data[, (varname) := as.numeric(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
         }
-
       }
 
     }
@@ -1664,23 +1328,27 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
 
     # Define the time-invariant outcome for all units within a ref_onset_time
     if(class(bs_ES_data[[ref_reg_weights]]) == "integer"){
+      bs_ES_data[, (ref_reg_weights) := as.numeric(get(ref_reg_weights))]
       # needed to include type checks as sum() often converts from integer to numeric
       # use sum() instead of max() just to parallel earlier code; wouldn't anticipate negative values in a weight variable
-      bs_ES_data[, (ref_reg_weights) := sum(as.integer(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time))), by=c(unit_var, "ref_onset_time")]
-    } else{
-      bs_ES_data[, (ref_reg_weights) := sum(get(ref_reg_weights)*(ref_event_time==ref_reg_weights_event_time)), by=c(unit_var, "ref_onset_time")]
     }
+    bs_ES_data[, (ref_reg_weights) := unique(get(ref_reg_weights)[ref_event_time==ref_reg_weights_event_time], na.rm = TRUE)[1], by=c(unit_var, "ref_onset_time")]
+
 
     # remove any cases with ref_reg_weights <= 0, -Inf, Inf, or NA
     bs_ES_data <- bs_ES_data[(!is.na(get(ref_reg_weights))) & (!is.infinite(get(ref_reg_weights))) & (get(ref_reg_weights) > 0)]
     gc()
+
   }
 
   # estimate inverse probability weights, if relevant
   if(ipw == TRUE){
 
     # Within each DiD sample, estimate weights to balance provided covariates
-    bs_ES_data[, did_id := .GRP, keyby = list(ref_onset_time, catt_specific_sample)]
+    bs_ES_data[, sortorder := .I]
+    bs_ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
+    setorderv(bs_ES_data, "sortorder")
+    bs_ES_data[, sortorder := NULL]
     did_ids <- bs_ES_data[, sort(unique(did_id))]
 
     if(ipw_composition_change == FALSE){
@@ -1689,7 +1357,7 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
 
       for(i in did_ids){
 
-        ipw_dt <- ES_make_ipw_dt2(did_dt = copy(bs_ES_data[did_id == i]),
+        ipw_dt <- ES_make_ipw_dt(did_dt = copy(bs_ES_data[did_id == i]),
                                  unit_var = unit_var,
                                  cal_time_var = cal_time_var,
                                  discrete_covars = discrete_covars,
@@ -1787,35 +1455,11 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
     ES_results_hetero_fs <- NULL
   }
 
-  # reduced form; homogeneous_ATT = TRUE
-  # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
-  ES_results_homo_rf <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
-                                                  outcomevar = outcomevar,
-                                                  unit_var = unit_var,
-                                                  onset_time_var = onset_time_var,
-                                                  cluster_vars = cluster_vars,
-                                                  homogeneous_ATT = TRUE,
-                                                  omitted_event_time = omitted_event_time,
-                                                  discrete_covars = discrete_covars,
-                                                  cont_covars = cont_covars,
-                                                  ref_discrete_covars = ref_discrete_covars,
-                                                  ref_cont_covars = ref_cont_covars,
-                                                  residualize_covariates = residualize_covariates,
-                                                  reg_weights = reg_weights,
-                                                  ref_reg_weights = ref_reg_weights,
-                                                  ipw = ipw,
-                                                  ipw_composition_change = ipw_composition_change,
-                                                  add_unit_fes = add_unit_fes,
-                                                  cohort_by_cohort = cohort_by_cohort,
-                                                  cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
-  gc()
-  setnames(ES_results_homo_rf,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
-
-  if(!is.null(endog_var)){
-    # first_stage; homogeneous_ATT = TRUE
+  if(heterogeneous_only == FALSE){
+    # reduced form; homogeneous_ATT == TRUE
     # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
-    ES_results_homo_fs <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
-                                                    outcomevar = endog_var,
+    ES_results_homo_rf <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
+                                                    outcomevar = outcomevar,
                                                     unit_var = unit_var,
                                                     onset_time_var = onset_time_var,
                                                     cluster_vars = cluster_vars,
@@ -1834,8 +1478,37 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
                                                     cohort_by_cohort = cohort_by_cohort,
                                                     cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
     gc()
-    setnames(ES_results_homo_fs,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+    setnames(ES_results_homo_rf,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+
+    if(!is.null(endog_var)){
+      # first_stage; homogeneous_ATT == TRUE
+      # NOTE: need to copy(ES_data) as by_cohort_ES_estimate_ATT changes the underlying data
+      ES_results_homo_fs <- by_cohort_ES_estimate_ATT(ES_data = copy(bs_ES_data),
+                                                      outcomevar = endog_var,
+                                                      unit_var = unit_var,
+                                                      onset_time_var = onset_time_var,
+                                                      cluster_vars = cluster_vars,
+                                                      homogeneous_ATT = TRUE,
+                                                      omitted_event_time = omitted_event_time,
+                                                      discrete_covars = discrete_covars,
+                                                      cont_covars = cont_covars,
+                                                      ref_discrete_covars = ref_discrete_covars,
+                                                      ref_cont_covars = ref_cont_covars,
+                                                      residualize_covariates = residualize_covariates,
+                                                      reg_weights = reg_weights,
+                                                      ref_reg_weights = ref_reg_weights,
+                                                      ipw = ipw,
+                                                      ipw_composition_change = ipw_composition_change,
+                                                      add_unit_fes = add_unit_fes,
+                                                      cohort_by_cohort = cohort_by_cohort,
+                                                      cohort_by_cohort_num_cores = cohort_by_cohort_num_cores)[[1]]
+      gc()
+      setnames(ES_results_homo_fs,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
+    } else{
+      ES_results_homo_fs <- NULL
+    }
   } else{
+    ES_results_homo_rf <- NULL
     ES_results_homo_fs <- NULL
   }
 
@@ -1909,6 +1582,10 @@ Wald_bootstrap_ES <- function(iter, long_data, outcomevar, unit_var, cal_time_va
   figdata <- rbindlist(list(figdata_rf, figdata_fs), use.names = TRUE, fill = TRUE)
   rm(figdata_rf)
   rm(figdata_fs)
+
+  # rbindlist() to ES_results_homo* would have made ref_onset_time 'character' since ref_onset_time == "Pooled" there, but if heterogeneous_only = TRUE, ES_results_homo_fs = NULL
+  # so manually make this edit here to make minimal edits relative to ES()
+  figdata[, ref_onset_time := as.character(ref_onset_time)]
 
   # merge various *_unique_units into figdata
   # exclude catt_treated_unique_units/catt_total_unique_units as these will be added as part of (un)weighted means below

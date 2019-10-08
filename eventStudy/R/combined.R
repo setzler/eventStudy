@@ -307,7 +307,10 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   if(ipw == TRUE){
 
     # Within each DiD sample, estimate weights to balance provided covariates
+    ES_data[, sortorder := .I]
     ES_data[, did_id := .GRP, by = list(ref_onset_time, catt_specific_sample)]
+    setorderv(ES_data, "sortorder")
+    ES_data[, sortorder := NULL]
     did_ids <- ES_data[, sort(unique(did_id))]
 
     if(ipw_composition_change == FALSE){

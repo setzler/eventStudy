@@ -155,13 +155,21 @@ ES_clean_data <- function(long_data,
 
       if(!(is.null(ntile_var)) & ntile_avg == TRUE){
 
-        # Will be using the three-year mean of ntile_var instead of just omitted_event_time
-        # use sum() instead of max() as possible that ntile_var takes on negative values
+        # Will be using the two-year mean of ntile_var instead of just omitted_event_time
+        # 1) use sum2() instead of max2() in case 'ntile_var' takes on negative values (as max2() would then return 0)
         # na.rm = TRUE will mean the missings of ntile_var will be treated as 0
-        possible_treated_control[, pre1 := sum((ref_event_time == -1)*get(ntile_var), na.rm = TRUE), by = list(get(unit_var))]
-        possible_treated_control[, pre2 := sum((ref_event_time == -2)*get(ntile_var), na.rm = TRUE), by = list(get(unit_var))]
-        possible_treated_control[, pre3 := sum((ref_event_time == -3)*get(ntile_var), na.rm = TRUE), by = list(get(unit_var))]
-        possible_treated_control[, avg_ntile_var := ((pre1 + pre2 + pre3) / 3)]
+        possible_treated_control[, pre1 := sum2((ref_event_time == omitted_event_time)*get(ntile_var), na.rm = TRUE), by = list(get(unit_var))]
+        if((omitted_event_time + anticipation < -1)){
+          # case where omitted_event_time is at least 2 years before the start of anticipation/treatment
+          # will use the year AFTER omitted_event_time (which stills satisfies the design as its before anticipation)
+          possible_treated_control[, pre2 := sum2((ref_event_time == (omitted_event_time + 1))*get(ntile_var), na.rm = TRUE), by = list(get(unit_var))]
+        } else if((omitted_event_time + anticipation == -1)){
+          # case where omitted_event_time is 1 year before the start of anticipation/treatment
+          # will use the year BEFORE omitted_event_time
+          possible_treated_control[, pre2 := sum2((ref_event_time == (omitted_event_time - 1))*get(ntile_var), na.rm = TRUE), by = list(get(unit_var))]
+        }
+
+        possible_treated_control[, avg_ntile_var := ((pre1 + pre2) / 2)]
         possible_treated_control[, (ntile_var) := avg_ntile_var]
         possible_treated_control[, avg_ntile_var := NULL]
         gc()

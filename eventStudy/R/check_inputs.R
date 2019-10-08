@@ -33,6 +33,7 @@ ES_check_inputs <-
            bootstrapES = FALSE,
            bootstrap_iters = 1,
            bootstrap_num_cores = 1,
+           keep_all_bootstrap_results = FALSE,
            ipw = FALSE,
            ipw_model = 'linear',
            ipw_composition_change = FALSE,
@@ -57,7 +58,8 @@ ES_check_inputs <-
            linearDiD = FALSE,
            linearDiD_treat_var = NULL,
            cohort_by_cohort = FALSE,
-           cohort_by_cohort_num_cores = 1) {
+           cohort_by_cohort_num_cores = 1,
+           heterogeneous_only = FALSE) {
 
     # type checks
     assertDataTable(long_data)
@@ -124,6 +126,7 @@ ES_check_inputs <-
     assertFlag(bootstrapES)
     assertIntegerish(bootstrap_iters, len = 1, lower = 1)
     assertIntegerish(bootstrap_num_cores, len = 1, lower = 1)
+    assertFlag(keep_all_bootstrap_results)
     assertFlag(ipw)
     assertFlag(ipw_composition_change)
     assertNumber(ipw_ps_lower_bound, lower = 0, upper = 1)
@@ -161,6 +164,16 @@ ES_check_inputs <-
     }
     assertFlag(cohort_by_cohort)
     assertIntegerish(cohort_by_cohort_num_cores,len=1,lower=1)
+    assertFlag(heterogeneous_only)
+    if(homogeneous_ATT == TRUE & heterogeneous_only == TRUE){
+      stop(
+        sprintf(
+          "homogeneous_ATT='%s' and heterogeneous_only='%s', which logically conflict with one another.",
+          homogeneous_ATT,
+          heterogeneous_only
+        )
+      )
+    }
 
     # check that anticipation choice and omitted_event_time choice don't conflict
     if (omitted_event_time + anticipation > -1) {
