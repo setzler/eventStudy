@@ -64,6 +64,7 @@ ES_check_inputs <-
     assertCharacter(outcomevar, len = 1)
     assertCharacter(unit_var, len = 1)
     assertCharacter(cal_time_var, len = 1)
+    assertCharacter(onset_time_var, len = 1)
     if (!is.null(cluster_vars)) {
       assertCharacter(cluster_vars)
     }
@@ -379,6 +380,25 @@ ES_check_inputs <-
           )
         }
       }
+    }
+
+    # check that cal_time_var and onset_time_var are both integer
+    # we need this as we will take max/min of these when constructing the stacked data in ES_clean_data()
+    if((class(long_data[[cal_time_var]]) != "integer")){
+      stop(
+        sprintf(
+          "Variable cal_time_var='%s' in long_data is not of type integer. Please change it to type integer.",
+          cal_time_var
+        )
+      )
+    }
+    if((class(long_data[[onset_time_var]]) != "integer")){
+      stop(
+        sprintf(
+          "Variable onset_time_var='%s' in long_data is not of type integer. Please change it to type integer.",
+          onset_time_var
+        )
+      )
     }
 
     # temporary check -- code is currently not set up to accept ntile_event_time != omitted_event_time
