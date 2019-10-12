@@ -32,7 +32,8 @@ ES_clean_data <- function(long_data,
                           ntile_var_value = NA,
                           ntile_avg = FALSE,
                           endog_var = NULL,
-                          linearDiD_treat_var = NULL) {
+                          linearDiD_treat_var = NULL,
+                          ref_event_time_mean_vars = NULL) {
 
   # Restriction based on supplied omitted_event_time
 
@@ -93,7 +94,7 @@ ES_clean_data <- function(long_data,
       possible_treated_control <- list()
 
       possible_treated_control[[1]] <- long_data[relevant_subset == 1 & get(onset_time_var) == event_cohort,
-                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var, endog_var, linearDiD_treat_var))),
+                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var, endog_var, linearDiD_treat_var, ref_event_time_mean_vars))),
                                                  with = FALSE
                                                  ]
       gc()
@@ -101,7 +102,7 @@ ES_clean_data <- function(long_data,
       possible_treated_control[[1]][, treated := 1]
 
       possible_treated_control[[2]] <- long_data[relevant_subset == 1 & between(get(onset_time_var), event_cohort + min_control_gap, event_cohort + max_control_gap, incbounds = TRUE),
-                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var, endog_var, linearDiD_treat_var))),
+                                                 unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var, endog_var, linearDiD_treat_var, ref_event_time_mean_vars))),
                                                  with = FALSE
                                                  ]
 
@@ -243,7 +244,7 @@ ES_clean_data <- function(long_data,
                                          )
       gc()
 
-      stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var, endog_var, linearDiD_treat_var, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated"))), with = FALSE]
+      stack_across_cohorts_balanced_treated_control[[j]] <- balanced_treated_control[, unique(na.omit(c(outcomevar, unit_var, cal_time_var, onset_time_var, treated_subset_var, control_subset_var, treated_subset_var2, control_subset_var2, cluster_vars, discrete_covars, cont_covars, reg_weights, ref_reg_weights, ref_discrete_covars, ref_cont_covars, ntile_var, endog_var, linearDiD_treat_var, ref_event_time_mean_vars, "ref_onset_time", "ref_event_time", "catt_specific_sample", "treated"))), with = FALSE]
       gc()
 
       balanced_treated_control <- NULL

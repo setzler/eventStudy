@@ -59,7 +59,8 @@ ES_check_inputs <-
            linearDiD_treat_var = NULL,
            cohort_by_cohort = FALSE,
            cohort_by_cohort_num_cores = 1,
-           heterogeneous_only = FALSE) {
+           heterogeneous_only = FALSE,
+           ref_event_time_mean_vars = NULL) {
 
     # type checks
     assertDataTable(long_data)
@@ -411,6 +412,26 @@ ES_check_inputs <-
             )
           )
         }
+      }
+    }
+    if (testCharacter(ref_event_time_mean_vars)) {
+      for (vv in ref_event_time_mean_vars) {
+        if (!(vv %in% names(long_data))) {
+          stop(
+            sprintf(
+              "Variable ref_event_time_mean_vars='%s' is not in the long_data you provided.",
+              vv
+            )
+          )
+        }
+      }
+      if(outcomevar %in% ref_event_time_mean_vars){
+        stop(
+          sprintf(
+            "\n Variable outcomevar='%s' was also found among ref_event_time_mean_vars.\n We already grab stacked ES mean of outcomevar, please remove it from ref_event_time_mean_vars.",
+            vv
+          )
+        )
       }
     }
 

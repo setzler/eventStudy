@@ -16,7 +16,8 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
                ref_reg_weights = NULL, ref_reg_weights_event_time=0,
                ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
                endog_var = NULL, cohort_by_cohort = FALSE, cohort_by_cohort_num_cores = 1,
-               heterogeneous_only = TRUE){
+               heterogeneous_only = TRUE,
+               ref_event_time_mean_vars = NULL){
 
   flog.info("Beginning Wald_ES.")
 
@@ -40,7 +41,8 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
                   ref_reg_weights = ref_reg_weights, ref_reg_weights_event_time = ref_reg_weights_event_time,
                   ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
                   endog_var = endog_var, cohort_by_cohort = cohort_by_cohort, cohort_by_cohort_num_cores = cohort_by_cohort_num_cores,
-                  heterogeneous_only = heterogeneous_only)
+                  heterogeneous_only = heterogeneous_only,
+                  ref_event_time_mean_vars = ref_event_time_mean_vars)
 
   # if user will be producing bootstrap SEs, want to preserve a copy of the data as it is now;
   # otherwise, potential for changes to underlying sample in subsequent steps
@@ -133,7 +135,8 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
                            cluster_vars = cluster_vars, discrete_covars = discrete_covars, cont_covars = cont_covars, reg_weights = reg_weights, event_vs_noevent = event_vs_noevent,
                            ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars, ref_reg_weights = ref_reg_weights,
                            ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
-                           endog_var = endog_var)
+                           endog_var = endog_var,
+                           ref_event_time_mean_vars = ref_event_time_mean_vars)
 
   # construct discrete covariates specific to a ref_event_time
   # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
@@ -526,9 +529,13 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
   }
 
   # Collect CATT-specific-sample means of the outcome in the omitted_event_time (for scaling results)
-  means_rf <- ES_data[ref_event_time == omitted_event_time, list(mean_outcome = mean(get(outcomevar))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
+  means_rf <- ES_data[ref_event_time == omitted_event_time,
+                      list(mean_outcome = mean(get(outcomevar))),
+                      by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
   means_rf[, pooled_mean := ES_data[ref_event_time == omitted_event_time, mean(get(outcomevar))]]
-  treat_means_rf <- ES_data[ref_event_time == omitted_event_time & treated == 1, list(treat_mean_outcome = mean(get(outcomevar))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
+  treat_means_rf <- ES_data[ref_event_time == omitted_event_time & treated == 1,
+                            list(treat_mean_outcome = mean(get(outcomevar))),
+                            by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
   treat_means_rf[, treat_pooled_mean := ES_data[ref_event_time == omitted_event_time & treated == 1, mean(get(outcomevar))]]
 
   mapping <- ES_data[, .N, by = list(ref_onset_time,catt_specific_sample, ref_event_time)][order(ref_onset_time,catt_specific_sample,ref_event_time)]
@@ -536,6 +543,29 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
   means_rf <- merge(means_rf, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
   treat_means_rf <- merge(treat_means_rf, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
+
+  if(!is.null(ref_event_time_mean_vars)){
+    # Collect CATT-specific-sample means of the ref_event_time_mean_vars in omitted_event_time
+    # Did not na.omit these columns, so will do mean(, na.rm = TRUE)
+    req_varmeans <- ES_data[ref_event_time == omitted_event_time,
+                            lapply(.SD, mean, na.rm = TRUE),
+                            by = list(ref_onset_time, catt_specific_sample),
+                            .SDcols = ref_event_time_mean_vars][order(ref_onset_time, catt_specific_sample)]
+    setnames(req_varmeans,
+             setdiff(colnames(req_varmeans), c("ref_onset_time", "catt_specific_sample")),
+             paste0("mean_", setdiff(colnames(req_varmeans), c("ref_onset_time", "catt_specific_sample")))
+             )
+    req_treat_varmeans <- ES_data[ref_event_time == omitted_event_time & treated == 1,
+                                  lapply(.SD, mean, na.rm = TRUE),
+                                  by = list(ref_onset_time, catt_specific_sample),
+                                  .SDcols = ref_event_time_mean_vars][order(ref_onset_time, catt_specific_sample)]
+    setnames(req_treat_varmeans,
+             setdiff(colnames(req_treat_varmeans), c("ref_onset_time", "catt_specific_sample")),
+             paste0("treat_mean_", setdiff(colnames(req_treat_varmeans), c("ref_onset_time", "catt_specific_sample")))
+    )
+    req_varmeans <- merge(req_varmeans, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
+    req_treat_varmeans <- merge(req_treat_varmeans, mapping, by = c("ref_onset_time", "catt_specific_sample"), all.x = TRUE)
+  }
 
   if(!is.null(endog_var)){
     means_fs <- ES_data[ref_event_time == omitted_event_time, list(mean_outcome = mean(get(endog_var))), by = list(ref_onset_time,catt_specific_sample)][order(ref_onset_time,catt_specific_sample)]
@@ -987,6 +1017,11 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
   means_rf[, model := "reduced_form"]
   treat_means_rf[, model := "reduced_form"]
 
+  if(!(is.null(ref_event_time_mean_vars))){
+    req_varmeans[, model := "reduced_form"]
+    req_treat_varmeans[, model := "reduced_form"]
+  }
+
   if(!is.null(endog_var)){
     means_fs[, model := "first_stage"]
     treat_means_fs[, model := "first_stage"]
@@ -1079,6 +1114,10 @@ Wald_ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_va
 
   if(bootstrapES == TRUE & keep_all_bootstrap_results == TRUE){
     return_list[[7]] <- bootstrap_output
+  }
+
+  if(!(is.null(ref_event_time_mean_vars))){
+    return_list[[8]] <- list(req_varmeans, req_treat_varmeans)
   }
 
   flog.info('Wald_ES is finished.')
