@@ -1,12 +1,18 @@
 Package: eventStudy
 Type: Package
-Title: What the Package Does (Title Case)
-Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Title: Perform an Event Study in R
+Version: 1.0
+Author: David Novgorodsky and Bradley Setzler
+Maintainer: David Novgorodsky <david.novgorodsky@gmail.com>
+Description: R package for performing event studies with heterogeneous dynamic effects.
+License: MIT + file LICENSE
 Encoding: UTF-8
-Imports: data.table, futile.logger, checkmate, lfe, ggplot2, scales
 LazyData: true
+RoxygenNote: 7.1.1
+Depends: 
+    data.table,
+    futile.logger,
+    scales,
+    ggplot2,
+    lfe,
+    checkmate

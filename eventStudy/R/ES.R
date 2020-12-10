@@ -16,7 +16,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                ref_reg_weights = NULL, ref_reg_weights_event_time=0,
                ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
                endog_var = NULL,
-               linearDiD = FALSE, linearDiD_treat_var = NULL){
+               linearDiD = FALSE, linearDiD_treat_var = NULL,
+               return_clean_data = FALSE){
 
   flog.info("Beginning ES.")
 
@@ -381,6 +382,12 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
         setnames(ipw_dt, "V1", unit_var)
       }
     }
+  }
+
+
+  if(return_clean_data){
+    flog.info("Since you specified return_clean_data=TRUE, stopping estimation and returning the cleaned data.table object that would have been used directly in ATT estimation.")
+    return(ES_data)
   }
 
   # collect ATT estimates
