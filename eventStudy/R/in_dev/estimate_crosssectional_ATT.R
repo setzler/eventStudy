@@ -1,24 +1,23 @@
 #' @export
-ES_estimate_ATT <- function(ES_data,
-                            outcomevar,
-                            unit_var,
-                            onset_time_var,
-                            cluster_vars,
-                            residualize_covariates = FALSE,
-                            discrete_covars = NULL,
-                            cont_covars = NULL,
-                            ref_discrete_covars = NULL,
-                            ref_cont_covars = NULL,
-                            homogeneous_ATT = TRUE,
-                            omitted_event_time = -2,
-                            reg_weights = NULL,
-                            ref_reg_weights = NULL,
-                            ipw = FALSE,
-                            ipw_composition_change = FALSE,
-                            add_unit_fes = FALSE,
-                            linearDiD = FALSE,
-                            linearDiD_treat_var = NULL,
-                            cross_sectional_spec = FALSE) {
+ES_estimate_ATT_crosssectional <- function(ES_data,
+                                           outcomevar,
+                                           unit_var,
+                                           onset_time_var,
+                                           cluster_vars,
+                                           residualize_covariates = FALSE,
+                                           discrete_covars = NULL,
+                                           cont_covars = NULL,
+                                           ref_discrete_covars = NULL,
+                                           ref_cont_covars = NULL,
+                                           homogeneous_ATT = TRUE,
+                                           omitted_event_time = -2,
+                                           reg_weights = NULL,
+                                           ref_reg_weights = NULL,
+                                           ipw = FALSE,
+                                           ipw_composition_change = FALSE,
+                                           add_unit_fes = FALSE,
+                                           linearDiD = FALSE,
+                                           linearDiD_treat_var = NULL) {
 
   onset_times <- sort(unique(ES_data[, .N, by = eval(onset_time_var)][[onset_time_var]]))
   min_onset_time <- min(onset_times)
@@ -28,28 +27,13 @@ ES_estimate_ATT <- function(ES_data,
   ES_data[, ref_onset_ref_event_time := .GRP, keyby = list(ref_onset_time, ref_event_time)]
   setorderv(ES_data, "sortorder")
 
-  if(cross_sectional_spec == FALSE){
-
-    if(add_unit_fes == TRUE){
-      ES_data[, unit_sample := .GRP, keyby = c(unit_var, "catt_specific_sample", "ref_onset_time")]
-    } else{
-      ES_data[, unit_sample := .GRP, keyby = c(onset_time_var, "catt_specific_sample", "ref_onset_time")]
-    }
-
-    model_text <- "DiD"
-
+  # START FIRST PART THAT DIFFERS FROM estimate_DiD_ATT $@$
+  if(add_unit_fes == TRUE){
+    ES_data[, unit_sample := .GRP, keyby = c(unit_var, "ref_onset_time")]
   } else{
-
-    if(add_unit_fes == TRUE){
-      ES_data[, unit_sample := .GRP, keyby = c(unit_var, "ref_onset_time")]
-    } else{
-      ES_data[, unit_sample := .GRP, keyby = c(onset_time_var, "ref_onset_time")]
-    }
-
-    model_text <- "cross-sectional"
-
+    ES_data[, unit_sample := .GRP, keyby = c(onset_time_var, "ref_onset_time")]
   }
-
+  # END FIRST PART THAT DIFFERS FROM estimate_DiD_ATT
   setorderv(ES_data, "sortorder")
 
   # felm() will necessarily drop singletons on unit_sample, so we just exclude those now
@@ -308,19 +292,21 @@ ES_estimate_ATT <- function(ES_data,
   setnames(results, c("e"), onset_time_var)
   results[, pval := round(pval,8)]
 
+  # START SECOND PART THAT DIFFERS FROM estimate_DiD_ATT -- "(cross-sectional)" $@$
   if(homogeneous_ATT == FALSE & ipw == TRUE){
-    flog.info(sprintf("Estimated heterogeneous case with WLS using IPW (%s).", model_text))
+    flog.info("Estimated heterogeneous case with WLS using IPW (cross-sectional).")
   } else if(homogeneous_ATT == FALSE & ipw == FALSE & is.null(reg_weights) & is.null(ref_reg_weights)){
-    flog.info(sprintf("Estimated heterogeneous case with OLS (%s).", model_text))
+    flog.info("Estimated heterogeneous case with OLS (cross-sectional).")
   } else if(homogeneous_ATT == FALSE & ipw == FALSE & (!(is.null(reg_weights)) | !(is.null(ref_reg_weights)))){
-    flog.info(sprintf("Estimated heterogeneous case with WLS (%s).", model_text))
+    flog.info("Estimated heterogeneous case with WLS (cross-sectional).")
   } else if(homogeneous_ATT == TRUE & ipw == TRUE){
-    flog.info(sprintf("Estimated homogeneous case with WLS using IPW (%s).", model_text))
+    flog.info("Estimated homogeneous case with WLS using IPW (cross-sectional).")
   } else if(homogeneous_ATT == TRUE & ipw == FALSE & is.null(reg_weights) & is.null(ref_reg_weights)){
-    flog.info(sprintf("Estimated homogeneous case with OLS (%s).", model_text))
+    flog.info("Estimated homogeneous case with OLS (cross-sectional).")
   } else{
-    flog.info(sprintf("Estimated homogeneous case with WLS (%s).", model_text))
+    flog.info("Estimated homogeneous case with WLS (cross-sectional).")
   }
+  # END SECOND PART THAT DIFFERS FROM estimate_DiD_ATT -- "(cross-sectional)"
 
   output = list()
   output[[1]] <- results

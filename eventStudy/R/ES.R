@@ -17,7 +17,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                ntile_var = NULL, ntile_event_time = -2, ntiles = NA, ntile_var_value = NA, ntile_avg = FALSE,
                endog_var = NULL,
                linearDiD = FALSE, linearDiD_treat_var = NULL,
-               return_clean_data = FALSE){
+               return_clean_data = FALSE,
+               cross_sectional_spec = FALSE){
 
   flog.info("Beginning ES.")
 
@@ -41,7 +42,9 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                   ref_reg_weights = ref_reg_weights, ref_reg_weights_event_time = ref_reg_weights_event_time,
                   ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
                   endog_var = endog_var,
-                  linearDiD = linearDiD, linearDiD_treat_var = linearDiD_treat_var)
+                  linearDiD = linearDiD, linearDiD_treat_var = linearDiD_treat_var,
+                  return_clean_data = return_clean_data,
+                  cross_sectional_spec = cross_sectional_spec)
 
   # if user will be producing bootstrap SEs, want to preserve a copy of the data as it is now;
   # otherwise, potential for changes to underlying sample in subsequent steps
@@ -126,7 +129,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                            reg_weights = reg_weights)
   }
 
-  # process data
+  # process data and produce stacked dataset
   flog.info("Beginning data stacking.")
   ES_data <- ES_clean_data(long_data = long_data, outcomevar = outcomevar,
                            unit_var = unit_var, cal_time_var = cal_time_var, onset_time_var = onset_time_var,
@@ -140,6 +143,19 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                            ref_discrete_covars = ref_discrete_covars, ref_cont_covars = ref_cont_covars, ref_reg_weights = ref_reg_weights,
                            ntile_var = ntile_var, ntile_event_time = ntile_event_time, ntiles = ntiles, ntile_var_value = ntile_var_value, ntile_avg = ntile_avg,
                            endog_var = endog_var, linearDiD_treat_var = linearDiD_treat_var)
+
+  # If user wishes to conduct cross-sectional (rather than DiD) regressions, then
+  # many of the repeated omitted_event_time rows will be unnecessary in ES_data above.
+  # ==> also, catt_specific_sample will play no role
+  if(cross_sectional_spec == TRUE){
+    ES_data <- ES_data[(ref_event_time != omitted_event_time) |
+                          (ref_event_time == omitted_event_time & catt_specific_sample == 1)]
+    ES_data[, catt_specific_sample := NULL]
+    gc()
+    flog.info(sprintf("\n Since you specified cross_sectional_spec=TRUE, reorganized stacked data for cross-sectional regressions. \n Now data has %s rows.",
+                      format(dim(ES_data)[1], scientific = FALSE, big.mark = ","))
+    )
+  }
 
   # construct discrete covariates specific to a ref_event_time
   # will be time invariant for a given ref_onset_time == ref_discrete_covar_event_time, but time-varying across ref_onset_times
@@ -194,7 +210,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       # ==> this ensures that when we sum2() with a by(), we either return the value from the desired ref_event_time or NA
       # ==> otherwise, in case where varname is NA in desired ref_event_time, but not NA at some other times, sum2() would return 0
       ES_data[ref_event_time != ref_discrete_covar_event_time, (varname) := NA]
-      if(ref_discrete_covar_event_time == omitted_event_time){
+      if( (ref_discrete_covar_event_time == omitted_event_time) & (cross_sectional_spec == FALSE) ){
         ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_discrete_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
       } else{
         ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_discrete_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
@@ -237,13 +253,13 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       # ==> otherwise, in case where varname is NA in desired ref_event_time, but not NA at some other times, sum2() would return 0
       ES_data[ref_event_time != ref_cont_covar_event_time, (varname) := NA]
       if(class(ES_data[[var]]) == "integer"){
-        if(ref_cont_covar_event_time == omitted_event_time){
+        if( (ref_cont_covar_event_time == omitted_event_time) & (cross_sectional_spec == FALSE) ){
           ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
         } else{
           ES_data[, (varname) := as.integer(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
         }
       } else{
-        if(ref_cont_covar_event_time == omitted_event_time){
+        if( (ref_cont_covar_event_time == omitted_event_time) & (cross_sectional_spec == FALSE)){
           ES_data[, (varname) := as.numeric(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time", "catt_specific_sample")]
         } else{
           ES_data[, (varname) := as.numeric(sum2(get(varname)*(ref_event_time==ref_cont_covar_event_time), na.rm = TRUE)), by=c(unit_var, "ref_onset_time")]
@@ -305,7 +321,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
 
   # estimate inverse probability weights, if relevant
-  if(ipw == TRUE){
+  # TO DO: adjust for case of cross-sectional regressions
+  if((ipw == TRUE) & (cross_sectional_spec == FALSE)){
 
     # Within each DiD sample, estimate weights to balance provided covariates
     ES_data[, sortorder := .I]
@@ -392,6 +409,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
 
   # collect ATT estimates
   if(homogeneous_ATT == FALSE){
+
     ES_results_hetero <- ES_estimate_ATT(ES_data = copy(ES_data),
                                          outcomevar=outcomevar,
                                          unit_var = unit_var,
@@ -410,7 +428,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                          ipw_composition_change = ipw_composition_change,
                                          add_unit_fes = add_unit_fes,
                                          linearDiD = linearDiD,
-                                         linearDiD_treat_var = linearDiD_treat_var)
+                                         linearDiD_treat_var = linearDiD_treat_var,
+                                         cross_sectional_spec = cross_sectional_spec)
 
     gc()
 
@@ -424,6 +443,7 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   } else{
     ES_results_hetero <- NULL
   }
+
   ES_results_homo <- ES_estimate_ATT(ES_data = copy(ES_data),
                                      outcomevar=outcomevar,
                                      unit_var = unit_var,
@@ -442,7 +462,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
                                      ipw_composition_change = ipw_composition_change,
                                      add_unit_fes = add_unit_fes,
                                      linearDiD = linearDiD,
-                                     linearDiD_treat_var = linearDiD_treat_var)[[1]]
+                                     linearDiD_treat_var = linearDiD_treat_var,
+                                     cross_sectional_spec = cross_sectional_spec)[[1]]
   gc()
   setnames(ES_results_homo,c(onset_time_var,"event_time"),c("ref_onset_time","ref_event_time"))
 
@@ -471,8 +492,8 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
 
   # collect count of unique units that will be (implicitly) used to estimate cohort- and equally-weighted avgs for each event time
-  # as we won't have an estimate for the omitted_event_time, exclude it below
   # will merge these onto figdata at the very end
+  # as we won't have an estimate for the omitted_event_time, exclude it below
   event_time_total_unique_units <- ES_data[ref_event_time != omitted_event_time, list(event_time_total_unique_units = uniqueN(get(unit_var), na.rm = TRUE)), by = list(ref_event_time)][order(ref_event_time)]
 
   # collect count of unique units that will be (implicitly) used to estimate collapsed estimates
@@ -486,14 +507,16 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     setnames(collapse_input_dt, c("name", "event_times"))
 
     # for each grouping, get a unique count separately, and then just make a small table
-    # as we won't have an estimate for the omitted_event_time, exclude it
     collapsed_estimate_total_unique_units <- list()
     i <- 0
     for(g in unique(na.omit(collapse_input_dt[["name"]]))){
       i <- i + 1
+
+      # as we won't have an estimate for the omitted_event_time, exclude it below
       count <- ES_data[(ref_event_time != omitted_event_time) & (ref_event_time %in% unique(na.omit(unlist(collapse_input_dt[name == g][[2]])))),
                        uniqueN(get(unit_var), na.rm = TRUE)
-                       ]
+      ]
+
       collapsed_estimate_total_unique_units[[i]] <- data.table(grouping = g, collapsed_estimate_total_unique_units = count)
     }
     rm(i)
@@ -655,7 +678,6 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       j <- j + 1
 
       # extract event_times and results corresponding to grouping
-      # as we won't have an estimate for the omitted_event_time, exclude it below
       group_event_times <- setdiff(unique(na.omit(unlist(collapse_input_dt[name == g][[2]]))), omitted_event_time)
       dt <- figdata[(ref_event_time %in% group_event_times) & (rn == "catt")]
       dt[, grouping := g]

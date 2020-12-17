@@ -60,7 +60,9 @@ ES_check_inputs <-
            cohort_by_cohort = FALSE,
            cohort_by_cohort_num_cores = 1,
            heterogeneous_only = FALSE,
-           ref_event_time_mean_vars = NULL) {
+           ref_event_time_mean_vars = NULL,
+           return_clean_data = FALSE,
+           cross_sectional_spec = FALSE) {
 
     # type checks
     assertDataTable(long_data)
@@ -175,6 +177,8 @@ ES_check_inputs <-
         )
       )
     }
+    assertFlag(return_clean_data)
+    assertFlag(cross_sectional_spec)
 
     # check that anticipation choice and omitted_event_time choice don't conflict
     if (omitted_event_time + anticipation > -1) {
