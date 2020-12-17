@@ -38,30 +38,27 @@ ES_estimate_ATT <- function(ES_data,
 
     model_text <- "DiD"
 
+    setorderv(ES_data, "sortorder")
+
+    # felm() will necessarily drop singletons on unit_sample, so we just exclude those now
+    # in practice, this step should only have bite if add_unit_fes == TRUE
+    ES_data[, unit_var_block_count := .N, by = list(unit_sample)]
+    count_dropcases <- dim(ES_data[unit_var_block_count <= 1])[1]
+    if(count_dropcases > 0){
+      ES_data <- ES_data[unit_var_block_count > 1]
+      rm(count_dropcases)
+    }
+    ES_data[, unit_var_block_count := NULL]
+    gc()
+
   } else{
 
-    if(add_unit_fes == TRUE){
-      ES_data[, unit_sample := .GRP, keyby = c(unit_var, "ref_onset_time")]
-    } else{
-      ES_data[, unit_sample := .GRP, keyby = c(onset_time_var, "ref_onset_time")]
-    }
+    # there is no design-based need for these in this specification
+    ES_data[, unit_sample := 1L] # just to leave the felm() code unchanged
 
     model_text <- "cross-sectional"
 
   }
-
-  setorderv(ES_data, "sortorder")
-
-  # felm() will necessarily drop singletons on unit_sample, so we just exclude those now
-  # in practice, this step should only have bite if add_unit_fes == TRUE
-  ES_data[, unit_var_block_count := .N, by = list(unit_sample)]
-  count_dropcases <- dim(ES_data[unit_var_block_count <= 1])[1]
-  if(count_dropcases > 0){
-    ES_data <- ES_data[unit_var_block_count > 1]
-    rm(count_dropcases)
-  }
-  ES_data[, unit_var_block_count := NULL]
-  gc()
 
   # define the unique reference onset times now, after all known pre-drops of observations have been done
   ref_onset_times <- sort(unique(ES_data[, .N, by = list(ref_onset_time)][["ref_onset_time"]]))
@@ -116,14 +113,28 @@ ES_estimate_ATT <- function(ES_data,
 
   if (homogeneous_ATT == FALSE) {
 
+    # this loop generates dummies for all of the (cohort-specific) treated * event-time interactions of interest
+    # when cross_sectional_spec = TRUE, we also include the omitted_event_time since we can have a contrast in each year
     for (h in intersect((min(ES_data$ref_onset_time):max(ES_data$ref_onset_time)), ref_onset_times)) {
-      for (r in setdiff(min(ES_data[ref_onset_time == h]$ref_event_time):max(ES_data[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
-        var <- sprintf("ref_onset_time%s_catt%s", h, r)
-        ES_data[, (var) := as.integer(ref_onset_time == h & ref_event_time == r & get(onset_time_var) == h)]
-        if(linearDiD == TRUE){
-          ES_data[, (var) := as.numeric(get(var) * get(linearDiD_treat_var))]
+
+      if(cross_sectional_spec == FALSE){
+        for (r in setdiff(min(ES_data[ref_onset_time == h]$ref_event_time):max(ES_data[ref_onset_time == h]$ref_event_time), omitted_event_time)) {
+          var <- sprintf("ref_onset_time%s_catt%s", h, r)
+          ES_data[, (var) := as.integer(ref_onset_time == h & ref_event_time == r & get(onset_time_var) == h)]
+          if(linearDiD == TRUE){
+            ES_data[, (var) := as.numeric(get(var) * get(linearDiD_treat_var))]
+          }
+        }
+      } else{
+        for (r in min(ES_data[ref_onset_time == h]$ref_event_time):max(ES_data[ref_onset_time == h]$ref_event_time)) {
+          var <- sprintf("ref_onset_time%s_catt%s", h, r)
+          ES_data[, (var) := as.integer(ref_onset_time == h & ref_event_time == r & get(onset_time_var) == h)]
+          if(linearDiD == TRUE){
+            ES_data[, (var) := as.numeric(get(var) * get(linearDiD_treat_var))]
+          }
         }
       }
+
     }
 
     new_cols <- setdiff(colnames(ES_data), start_cols)
@@ -218,11 +229,24 @@ ES_estimate_ATT <- function(ES_data,
     results <- results[rn == "catt"]
   } else {
 
-    for (r in setdiff(min(ES_data$ref_event_time):max(ES_data$ref_event_time), omitted_event_time)) {
-      var <- sprintf("att%s", r)
-      ES_data[, (var) := as.integer(ref_event_time == r & ref_onset_time == get(onset_time_var))]
-      if(linearDiD == TRUE){
-        ES_data[, (var) := as.numeric(get(var) * get(linearDiD_treat_var))]
+    # this loop generates dummies for all of the treated * event-time interactions of interest (pooling across cohorts)
+    # when cross_sectional_spec = TRUE, we also include the omitted_event_time since we can have a contrast in each year
+
+    if(cross_sectional_spec == FALSE){
+      for (r in setdiff(min(ES_data$ref_event_time):max(ES_data$ref_event_time), omitted_event_time)) {
+        var <- sprintf("att%s", r)
+        ES_data[, (var) := as.integer(ref_event_time == r & ref_onset_time == get(onset_time_var))]
+        if(linearDiD == TRUE){
+          ES_data[, (var) := as.numeric(get(var) * get(linearDiD_treat_var))]
+        }
+      }
+    } else{
+      for (r in min(ES_data$ref_event_time):max(ES_data$ref_event_time)) {
+        var <- sprintf("att%s", r)
+        ES_data[, (var) := as.integer(ref_event_time == r & ref_onset_time == get(onset_time_var))]
+        if(linearDiD == TRUE){
+          ES_data[, (var) := as.numeric(get(var) * get(linearDiD_treat_var))]
+        }
       }
     }
 

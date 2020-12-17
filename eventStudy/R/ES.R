@@ -476,25 +476,46 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
   }
 
   # collect count of treated units by each (ref_onset_time, ref_event_time) for V1 of population-weighted ATTs
-  # as we won't have an estimate for the omitted_event_time, exclude it below
-  if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-    catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = sum(get(na.omit(unique(c(reg_weights, ref_reg_weights)))))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+
+  if(cross_sectional_spec == FALSE){
+    # as we won't have an estimate for the omitted_event_time, exclude it below
+    if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+      catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = sum(get(na.omit(unique(c(reg_weights, ref_reg_weights)))))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    } else{
+      catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    }
   } else{
-    catt_treated_unique_units <- ES_data[treated == 1 & (ref_event_time != omitted_event_time),list(catt_treated_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+      catt_treated_unique_units <- ES_data[treated == 1,list(catt_treated_unique_units = sum(get(na.omit(unique(c(reg_weights, ref_reg_weights)))))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    } else{
+      catt_treated_unique_units <- ES_data[treated == 1,list(catt_treated_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    }
   }
 
   # collect count of treated+control units by each (ref_onset_time, ref_event_time) for V2 of population-weighted ATTs
-  # as we won't have an estimate for the omitted_event_time, exclude it below
-  if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
-    catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = sum(get(na.omit(unique(c(reg_weights, ref_reg_weights)))))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+  if(cross_sectional_spec == FALSE){
+    # as we won't have an estimate for the omitted_event_time, exclude it below
+    if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+      catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = sum(get(na.omit(unique(c(reg_weights, ref_reg_weights)))))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    } else{
+      catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    }
   } else{
-    catt_total_unique_units <- ES_data[ref_event_time != omitted_event_time,list(catt_total_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    if(!(is.null(reg_weights)) | !(is.null(ref_reg_weights))){
+      catt_total_unique_units <- ES_data[,list(catt_total_unique_units = sum(get(na.omit(unique(c(reg_weights, ref_reg_weights)))))), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    } else{
+      catt_total_unique_units <- ES_data[,list(catt_total_unique_units = .N), by = list(ref_onset_time,ref_event_time)][order(ref_onset_time,ref_event_time)]
+    }
   }
 
   # collect count of unique units that will be (implicitly) used to estimate cohort- and equally-weighted avgs for each event time
   # will merge these onto figdata at the very end
-  # as we won't have an estimate for the omitted_event_time, exclude it below
-  event_time_total_unique_units <- ES_data[ref_event_time != omitted_event_time, list(event_time_total_unique_units = uniqueN(get(unit_var), na.rm = TRUE)), by = list(ref_event_time)][order(ref_event_time)]
+  if(cross_sectional_spec == FALSE){
+    # as we won't have an estimate for the omitted_event_time, exclude it below
+    event_time_total_unique_units <- ES_data[ref_event_time != omitted_event_time, list(event_time_total_unique_units = uniqueN(get(unit_var), na.rm = TRUE)), by = list(ref_event_time)][order(ref_event_time)]
+  } else{
+    event_time_total_unique_units <- ES_data[, list(event_time_total_unique_units = uniqueN(get(unit_var), na.rm = TRUE)), by = list(ref_event_time)][order(ref_event_time)]
+  }
 
   # collect count of unique units that will be (implicitly) used to estimate collapsed estimates
   # will merge these onto figdata at the very end (if relevant)
@@ -512,10 +533,16 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     for(g in unique(na.omit(collapse_input_dt[["name"]]))){
       i <- i + 1
 
-      # as we won't have an estimate for the omitted_event_time, exclude it below
-      count <- ES_data[(ref_event_time != omitted_event_time) & (ref_event_time %in% unique(na.omit(unlist(collapse_input_dt[name == g][[2]])))),
-                       uniqueN(get(unit_var), na.rm = TRUE)
-      ]
+      if(cross_sectional_spec == FALSE){
+        # as we won't have an estimate for the omitted_event_time, exclude it below
+        count <- ES_data[(ref_event_time != omitted_event_time) & (ref_event_time %in% unique(na.omit(unlist(collapse_input_dt[name == g][[2]])))),
+                         uniqueN(get(unit_var), na.rm = TRUE)
+        ]
+      } else{
+        count <- ES_data[(ref_event_time %in% unique(na.omit(unlist(collapse_input_dt[name == g][[2]])))),
+                         uniqueN(get(unit_var), na.rm = TRUE)
+        ]
+      }
 
       collapsed_estimate_total_unique_units[[i]] <- data.table(grouping = g, collapsed_estimate_total_unique_units = count)
     }
@@ -586,7 +613,13 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
     # for each such ref_event_time, want to extract the location (number) of the relevant parameters in catt_coefs
     # then will need to grab the relevant weight, and then construct the formula to supply to delta_method()
 
-    event_times <- setdiff(figdata[, sort(unique(ref_event_time))], omitted_event_time)
+    if(cross_sectional_spec == FALSE){
+      # as we won't have an estimate for the omitted_event_time, exclude it below
+      event_times <- setdiff(figdata[, sort(unique(ref_event_time))], omitted_event_time)
+    } else{
+      event_times <- figdata[, sort(unique(ref_event_time))]
+    }
+
     onset_times <- as.integer(figdata[rn == "catt", sort(unique(ref_onset_time))])
 
     min_onset_time <- min(onset_times)
@@ -678,7 +711,13 @@ ES <- function(long_data, outcomevar, unit_var, cal_time_var, onset_time_var, cl
       j <- j + 1
 
       # extract event_times and results corresponding to grouping
-      group_event_times <- setdiff(unique(na.omit(unlist(collapse_input_dt[name == g][[2]]))), omitted_event_time)
+      if(cross_sectional_spec == FALSE){
+        # as we won't have an estimate for the omitted_event_time, exclude it below
+        group_event_times <- setdiff(unique(na.omit(unlist(collapse_input_dt[name == g][[2]]))), omitted_event_time)
+      } else{
+        group_event_times <- unique(na.omit(unlist(collapse_input_dt[name == g][[2]])))
+      }
+
       dt <- figdata[(ref_event_time %in% group_event_times) & (rn == "catt")]
       dt[, grouping := g]
       dt[, unweighted_estimate := mean(estimate, na.rm = TRUE), by = list(ref_event_time)]
