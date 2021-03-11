@@ -551,7 +551,7 @@ ES_check_inputs <-
     }
     if (never_treat_action != 'none' &
         dim(long_data[is.na(get(onset_time_var))])[1] == 0) {
-      stop(
+      warning(
         sprintf(
           "never_treat_action='%s' but no units have %s=NA. Let me suggest never_treat_action='none'.",
           never_treat_action,
