@@ -1,7 +1,20 @@
+
+#### Warning: This package is now deprecated.
+
+This package is now deprecated and we do not plan to maintain it going forward. We suggest one of the following alternatives:
+
+- The `did` package in R [(here)](https://bcallaway11.github.io/did/).
+- The `DiDforBigData` package in R [(here)](https://setzler.github.io/DiDforBigData/).
+
+
+
+
+
+
 eventStudy: Perform an Event Study in R
 ================
 
-Created by David Novgorodsky and Bradley Setzler, University of Chicago
+Created by David Novgorodsky and Bradley Setzler at the University of Chicago
 
 The methods are explained in [our companion Practical Guide to Event Studies](https://github.com/setzler/eventStudy/blob/master/guide/event_study_guide.pdf).
 
